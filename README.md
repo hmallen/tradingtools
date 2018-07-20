@@ -2,4 +2,4 @@
 
 Suite of tools for real-time cryptocurrency market analysis.
 
-*flowmeter.py*
+<b>flowmeter.py</b>
