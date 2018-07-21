@@ -15,3 +15,17 @@ Suite of tools for real-time cryptocurrency market analysis.
 
 <b>Later:</b>
 - Calculate duration of missing data if more requested than available
+
+<b>Analysis Features:</b>
+- Total Volume
+-- Buy
+-- Sell
+-- Total
+- Trade Count
+-- Buy
+-- Sell
+-- Total
+- Price Average
+-- Buy
+-- Sell
+-- Total
