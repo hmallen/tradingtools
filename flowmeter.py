@@ -39,7 +39,9 @@ binance_secret = config['binance']['secret']
 binance_client = BinanceClient(binance_api, binance_secret)
 binance_ws = BinanceSocketManager(binance_client)
 
-db = MongoClient(config['mongodb']['uri'])[config['mongodb']['db']]['testing']
+db = MongoClient(config['mongodb']['uri'])[config['mongodb']['db']]
+
+collections = {'data': 'testing', 'analysis': 'analysis'}
 
 
 def process_message(msg, populate=False, symbol=None):
@@ -139,7 +141,7 @@ def process_message(msg, populate=False, symbol=None):
 
         if update_required == True:
             try:
-                inserted_id = db.insert_one(trade_doc).inserted_id
+                inserted_id = db[collections['data']].insert_one(trade_doc).inserted_id
 
                 logger_message = trade_doc['symbol'] + ' - ' + trade_doc['side'].upper() + ' '
                 if trade_doc['side'] == 'buy': logger_message += ' '
@@ -254,7 +256,7 @@ def analyze_data(market, feature, interval='24h', start=None):
 
 if __name__ == '__main__':
     try:
-        # Get list of available Binance markets
+        ## Get list of available Binance markets to verify user input ##
         binance_info = binance_client.get_exchange_info()
 
         binance_markets = []
@@ -264,7 +266,11 @@ if __name__ == '__main__':
 
         trade_sockets = {}
 
-        # User inputs desired market
+        ## Gather desired settings from user input ##
+        user_market = None
+        populate_db = None
+        populate_duration = None
+
         user_market = input('Choose a Binance market (ex. XLMBTC): ').upper()
 
         if user_market not in binance_markets:
@@ -273,38 +279,78 @@ if __name__ == '__main__':
         else:
             logger.info('Selected Binance market ' + user_market + '.')
 
-        # Existing data for market deleted from db
+        user_populate_db = input('Populate database with historical trades? [y/n]: ').upper()
+
+        if user_populate_db != 'Y' and user_populate_db != 'N':
+            logger.error('Invalid selection. Exiting.')
+            sys.exit(1)
+        else:
+            if user_populate_db == 'Y':
+                populate_db = True
+                pop_msg = 'Populating '
+            else:
+                populate_db = False
+                pop_msg = 'Not populating '
+            pop_msg += 'database with historical trade data.'
+
+            logger.info(pop_msg)
+
+        if populate_db == True:
+            user_populate_duration = input('Input desired start of historical data population (ex. 3 hours ago / 2 days ago / 1 week ago): ')
+
+            test_duration = user_populate_duration + ' UTC'
+            logger.debug('test_duration: ' + test_duration)
+
+            try:
+                historical_trades = binance_client.aggregate_trade_iter(symbol=user_market, start_str=test_duration)
+                trade_count = sum(1 for trade in historical_trades)
+                populate_duration = test_duration
+                logger.debug('populate_duration: ' + populate_duration)
+            except:
+                logger.error('Invalid input for start of historical data population. Exiting.')
+                sys.exit(1)
+
+        if user_market == None or populate_db == None:
+            logger.error('Failed to gather valid user input. Exiting.')
+            sys.exit(1)
+        elif populate_db != None and populate_duration == None:
+            logger.error('Failed to gather historical trade data population duration. Exiting.')
+            sys.exit(1)
+
+        ## Delete existing data for market from database ##
         logger.info('Deleting existing ' + user_market + ' data from database.')
 
-        delete_result = db.delete_many({'symbol': user_market})
+        delete_result = db[collections['data']].delete_many({'symbol': user_market})
         logger.debug('delete_result.deleted_count: ' + str(delete_result.deleted_count))
 
-        # Initialize aggregated trade websocket for market
+        ## Initialize aggregated trade websocket for market ##
         logger.info('Initializing trade websocket for ' + user_market + '.')
 
         #trade_sockets[user_market] = binance_ws.start_trade_socket(user_market, process_message)
         trade_sockets[user_market] = binance_ws.start_aggtrade_socket(user_market, process_message)
 
-        # Start websocket for market and begin processing data
+        ## Start websocket for market and begin processing data ##
         logger.info('Starting websocket connection for ' + user_market + '.')
 
         binance_ws.start()
 
-        logger.info('Populating database with historical trade data.')
+        if populate_db == True:
+            ## Populate database with historical trade data for extended backtesting/analysis ##
+            logger.info('Populating database with historical trade data.')
 
-        arguments = tuple()
-        keyword_arguments = {'market': user_market, 'start_time': '3 hours ago UTC'}
+            arguments = tuple()
+            keyword_arguments = {'market': user_market, 'start_time': populate_duration}
 
-        populate_proc = Process(target=populate_historical, args=arguments, kwargs=keyword_arguments)
+            populate_proc = Process(target=populate_historical, args=arguments, kwargs=keyword_arguments)
 
-        logger.debug('Starting populate database process.')
-        populate_proc.start()
-        logger.debug('Joining populate database process.')
-        populate_proc.join()
-        logger.debug('Populate database process complete.')
+            logger.debug('Starting populate database process.')
+            populate_proc.start()
+            logger.debug('Joining populate database process.')
+            populate_proc.join()
+            logger.debug('Populate database process complete.')
 
         logger.debug('Entering main loop.')
-        
+
         while (True):
             time.sleep(0.1)
 
@@ -315,10 +361,13 @@ if __name__ == '__main__':
         logger.info('Exit signal received.')
 
     finally:
-        logger.info('Closing Binance socket manager.')
+        if reactor.running:
+            logger.info('Closing Binance socket manager.')
+            binance_ws.close()
 
-        binance_ws.close()
+            logger.info('Stopping reactor.')
+            reactor.stop()
+        else:
+            logger.info('No websocket connected or reactor running.')
 
-        logger.info('Stopping reactor.')
-
-        reactor.stop()
+        logger.info('Exiting.')
