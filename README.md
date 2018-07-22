@@ -5,7 +5,8 @@ Suite of tools for real-time cryptocurrency market analysis.
 <h2>flowmeter.py</h2>
 
 <b>To Do:</b>
--
+- Add ws restart on error
+- Add ws timer and restart at 24 hours
 
 <b>Needs Testing:</b>
 -

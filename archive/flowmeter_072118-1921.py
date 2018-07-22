@@ -11,21 +11,22 @@ from pprint import pprint
 from binance.client import Client as BinanceClient
 from binance.websockets import BinanceSocketManager
 
-import dateparser
 from multiprocessing import Process
 from pymongo import MongoClient
 from twisted.internet import reactor
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-i', '--interval', type=int, default=10, help='Interval (seconds) between each analysis run.')
 parser.add_argument('-m', '--market', type=str, default=None, help='Market for analysis (ex. XLMBTC).')
-parser.add_argument('-b', '--backtest', type=str, default=None, help='Length of time for historical trade data analysis (ex. 3 hours).')
-parser.add_argument('-i', '--interval', type=int, default=10, help='Interval (seconds) between analysis runs (ex. 30).')
+parser.add_argument('-p', '--populate', action='store_true', default=None, help='Populate database with historical trade data.')
+parser.add_argument('-d', '--duration', type=str, default=None, help='Amount of historical data for database population (ex. 3 days).')
 parser.add_argument('--debug', action='store_true', default=False, help='Enable debug level output.')
 args = parser.parse_args()
 
-user_market = args.market
-backtest_duration = args.backtest
 analysis_interval = args.interval
+user_market = args.market
+populate_db = args.populate
+user_populate_duration = args.duration
 debug_mode = args.debug
 
 logging.basicConfig()
@@ -373,6 +374,10 @@ if __name__ == '__main__':
         trade_sockets = {}
 
         ## Gather desired settings from user input ##
+        #user_market = None
+        #populate_db = None
+        #populate_duration = None
+
         if user_market == None:
             user_market = input('Choose a Binance market (ex. XLMBTC): ').upper()
 
@@ -382,25 +387,46 @@ if __name__ == '__main__':
             else:
                 logger.info('Selected Binance market ' + user_market + '.')
 
-        if backtest_duration == None:
-            backtest_duration = input('Input length of time for trade data backtesting/analysis (ex. 30 seconds/9 minutes/3 hours/2 days/1 week): ')
+        if populate_db == None:
+            user_populate_db = input('Populate database with historical trades? [y/n]: ').upper()
 
-        test_duration = backtest_duration + ' ago UTC'
-        logger.debug('test_duration: ' + test_duration)
+            if user_populate_db != 'Y' and user_populate_db != 'N':
+                logger.error('Invalid selection. Exiting.')
+                sys.exit(1)
+            else:
+                if user_populate_db == 'Y':
+                    populate_db = True
+                    pop_msg = 'Populating '
+                else:
+                    populate_db = False
+                    pop_msg = 'Not populating '
+                pop_msg += 'database with historical trade data.'
 
-        try:
-            logger.debug('Testing user-provided historical data population input.')
-            historical_trades = binance_client.aggregate_trade_iter(symbol=user_market, start_str=test_duration)
-            logger.debug('Attempting count of trades in generator object.')
-            trade_count = sum(1 for trade in historical_trades)
-            populate_duration = test_duration
-            logger.debug('populate_duration: ' + populate_duration)
-        except:
-            logger.error('Invalid input for start of historical data population. Exiting.')
-            sys.exit(1)
+                logger.info(pop_msg)
 
-        if user_market == None or backtest_duration == None:
+        if populate_db == True:
+            if user_populate_duration == None:
+                user_populate_duration = input('Input desired amount of historical data for database population (ex. 30 seconds/9 minutes/3 hours/2 days/1 week): ')
+
+            test_duration = user_populate_duration + ' ago UTC'
+            logger.debug('test_duration: ' + test_duration)
+
+            try:
+                logger.debug('Testing user-provided historical data population input.')
+                historical_trades = binance_client.aggregate_trade_iter(symbol=user_market, start_str=test_duration)
+                logger.debug('Attempting count of trades in generator object.')
+                trade_count = sum(1 for trade in historical_trades)
+                populate_duration = test_duration
+                logger.debug('populate_duration: ' + populate_duration)
+            except:
+                logger.error('Invalid input for start of historical data population. Exiting.')
+                sys.exit(1)
+
+        if user_market == None or populate_db == None:
             logger.error('Failed to gather valid user input. Exiting.')
+            sys.exit(1)
+        elif populate_db != None and populate_duration == None:
+            logger.error('Failed to gather historical trade data population duration. Exiting.')
             sys.exit(1)
 
         ## Delete existing data for market from database ##
@@ -420,24 +446,20 @@ if __name__ == '__main__':
 
         binance_ws.start()
 
-        ## Populate database with historical trade data for extended backtesting/analysis ##
-        logger.info('Populating database with historical trade data.')
+        if populate_db == True:
+            ## Populate database with historical trade data for extended backtesting/analysis ##
+            logger.info('Populating database with historical trade data.')
 
-        populate_start_dt = dateparser.parse(backtest_duration) - datetime.timedelta(hours=1)   # Populate with 1 extra hour of data
+            arguments = tuple()
+            keyword_arguments = {'market': user_market, 'start_time': populate_duration}
 
-        populate_start = int(time.mktime(populate_start_dt.timetuple()) * 1000)
-        logger.debug('populate_start:' + str(populate_start))
+            populate_proc = Process(target=populate_historical, args=arguments, kwargs=keyword_arguments)
 
-        arguments = tuple()
-        keyword_arguments = {'market': user_market, 'start_time': populate_start}
-
-        populate_proc = Process(target=populate_historical, args=arguments, kwargs=keyword_arguments)
-
-        logger.debug('Starting populate database process.')
-        populate_proc.start()
-        logger.debug('Joining populate database process.')
-        populate_proc.join()
-        logger.debug('Populate database process complete.')
+            logger.debug('Starting populate database process.')
+            populate_proc.start()
+            logger.debug('Joining populate database process.')
+            populate_proc.join()
+            logger.debug('Populate database process complete.')
 
         logger.info('Database ready for analysis.')
 
