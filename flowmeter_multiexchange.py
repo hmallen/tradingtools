@@ -56,7 +56,7 @@ binance_ws = BinanceSocketManager(binance_client)
 
 db = MongoClient(config['mongodb']['uri'])[config['mongodb']['db']]
 
-collections = {'data': 'flowmeter', 'analysis': 'analysis'}
+collections = {'data': config['mongodb']['collection_data'], 'analysis': config['mongodb']['collection_analysis']}
 
 
 def process_message(msg, populate=False, exchange=None, market=None):
