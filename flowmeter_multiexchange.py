@@ -227,11 +227,12 @@ def analyze_data(exchange, market, interval='1h', start=None):
                                                                             'sell': {'absolute': None, 'percent': None}},
                                                                  'count': {'all': {'absolute': None, 'percent': None},
                                                                            'buy': {'absolute': None, 'percent': None},
-                                                                           'sell': {'absolute': None, 'percent': None}}}}}
+                                                                           'sell': {'absolute': None, 'percent': None}}},
+                                                  'time': None}}
 
     try:
         if start != None:
-            analysis_start = time.mktime(start.timetuple()) * 1000
+            analysis_start = int(time.mktime(start.timetuple()) * 1000)
 
         else:
             #unix_time_ms = int(time.mktime(datetime.datetime.utcnow().timetuple()) * 1000)
@@ -339,41 +340,44 @@ def analyze_data(exchange, market, interval='1h', start=None):
             pipeline_last.append(group_pipeline)
 
             ## Run Aggregation Pipelines ##
-            #aggregate_result_current = db.command('aggregate', collections['data'], cursor={}, pipeline=pipeline_current)
-            aggregate_result_current = db[collections['data']].aggregate(pipeline_current)
-            #aggregate_result_last = db.command('aggregate', collections['data'], cursor={}, pipeline=pipeline_last)
-            aggregate_result_last = db[collections['data']].aggregate(pipeline_last)
+            aggregate_result_current = db.command('aggregate', collections['data'], cursor={}, pipeline=pipeline_current)
+            #aggregate_result_current = db[collections['data']].aggregate(pipeline_current)
+            aggregate_result_last = db.command('aggregate', collections['data'], cursor={}, pipeline=pipeline_last)
+            #aggregate_result_last = db[collections['data']].aggregate(pipeline_last)
 
-            result_current = list(aggregate_result_current)[0]
-            result_last = list(aggregate_result_last)[0]
+            if aggregate_result_current['ok'] == 1 and aggregate_result_last['ok'] == 1:
+                #result_current = list(aggregate_result_current)[0]
+                result_current = aggregate_result_current['cursor']['firstBatch'][0]
+                #result_last = list(aggregate_result_last)[0]
+                result_last = aggregate_result_last['cursor']['firstBatch'][0]
 
-            # Calculate differences to add to return dictionary
-            vol_diff_absolute = result_current['volume'] - result_last['volume']
-            vol_diff_percent = round(vol_diff_absolute / result_last['volume'], 4)
-            price_diff_absolute = round(result_current['price'] - result_last['price'], 8)
-            price_diff_percent = round(price_diff_absolute / result_last['price'], 4)
-            amount_diff_absolute = round(result_current['amount'] - result_last['amount'], 8)
-            amount_diff_percent = round(amount_diff_absolute / result_last['amount'], 4)
-            count_diff_absolute = result_current['count'] - result_last['count']
-            count_diff_percent = round(count_diff_absolute / result_last['count'], 4)
+                # Calculate differences to add to return dictionary
+                vol_diff_absolute = result_current['volume'] - result_last['volume']
+                vol_diff_percent = round(vol_diff_absolute / result_last['volume'], 4)
+                price_diff_absolute = round(result_current['price'] - result_last['price'], 8)
+                price_diff_percent = round(price_diff_absolute / result_last['price'], 4)
+                amount_diff_absolute = round(result_current['amount'] - result_last['amount'], 8)
+                amount_diff_percent = round(amount_diff_absolute / result_last['amount'], 4)
+                count_diff_absolute = result_current['count'] - result_last['count']
+                count_diff_percent = round(count_diff_absolute / result_last['count'], 4)
 
-            # Add results to return dictionary
-            analyze_return['result']['current']['volume'][match] = result_current['volume']
-            analyze_return['result']['current']['price'][match] = round(result_current['price'], 8)
-            analyze_return['result']['current']['amount'][match] = round(result_current['amount'], 8)
-            analyze_return['result']['current']['count'][match] = result_current['count']
-            analyze_return['result']['last']['volume'][match] = result_last['volume']
-            analyze_return['result']['last']['price'][match] = round(result_last['price'], 8)
-            analyze_return['result']['last']['amount'][match] = round(result_last['amount'], 8)
-            analyze_return['result']['last']['count'][match] = result_last['count']
-            analyze_return['result']['difference']['volume'][match]['absolute'] = vol_diff_absolute
-            analyze_return['result']['difference']['volume'][match]['percent'] = vol_diff_percent
-            analyze_return['result']['difference']['price'][match]['absolute'] = price_diff_absolute
-            analyze_return['result']['difference']['price'][match]['percent'] = price_diff_percent
-            analyze_return['result']['difference']['amount'][match]['absolute'] = amount_diff_absolute
-            analyze_return['result']['difference']['amount'][match]['percent'] = amount_diff_percent
-            analyze_return['result']['difference']['count'][match]['absolute'] = count_diff_absolute
-            analyze_return['result']['difference']['count'][match]['percent'] = count_diff_percent
+                # Add results to return dictionary
+                analyze_return['result']['current']['volume'][match] = result_current['volume']
+                analyze_return['result']['current']['price'][match] = round(result_current['price'], 8)
+                analyze_return['result']['current']['amount'][match] = round(result_current['amount'], 8)
+                analyze_return['result']['current']['count'][match] = result_current['count']
+                analyze_return['result']['last']['volume'][match] = result_last['volume']
+                analyze_return['result']['last']['price'][match] = round(result_last['price'], 8)
+                analyze_return['result']['last']['amount'][match] = round(result_last['amount'], 8)
+                analyze_return['result']['last']['count'][match] = result_last['count']
+                analyze_return['result']['difference']['volume'][match]['absolute'] = vol_diff_absolute
+                analyze_return['result']['difference']['volume'][match]['percent'] = vol_diff_percent
+                analyze_return['result']['difference']['price'][match]['absolute'] = price_diff_absolute
+                analyze_return['result']['difference']['price'][match]['percent'] = price_diff_percent
+                analyze_return['result']['difference']['amount'][match]['absolute'] = amount_diff_absolute
+                analyze_return['result']['difference']['amount'][match]['percent'] = amount_diff_percent
+                analyze_return['result']['difference']['count'][match]['absolute'] = count_diff_absolute
+                analyze_return['result']['difference']['count'][match]['percent'] = count_diff_percent
 
         # Calculate difference between requested interval start and first document trade time
         # Can use to warn user about data missing from requested calculation
@@ -405,6 +409,7 @@ def analysis_loop(backtest_duration):
                 analysis_document['module'] = 'flowmeter'
                 analysis_document['exchange'] = user_exchange
                 analysis_document['market'] = user_market
+                analysis_document['time'] = time.mktime(datetime.datetime.now().timetuple())
 
                 pprint(analysis_document)
 

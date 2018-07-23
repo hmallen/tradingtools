@@ -1,0 +1,5 @@
+﻿http://wxglade.sourceforge.net/
+https://glade.gnome.org/
+http://easygui.sourceforge.net/tutorial.html
+https://wiki.python.org/moin/GuiProgramming
+https://kivy.org/#home
