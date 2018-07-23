@@ -19,7 +19,7 @@ from twisted.internet import reactor
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--market', type=str, default=None, help='Market for analysis (ex. XLMBTC).')
 parser.add_argument('-b', '--backtest', type=str, default=None, help='Length of time for historical trade data analysis (ex. 3 hours).')
-parser.add_argument('-i', '--interval', type=int, default=10, help='Interval (seconds) between analysis runs (ex. 30).')
+parser.add_argument('-i', '--interval', type=int, default=10, help='Interval (seconds) between analysis runs (ex. 30). [Default: 10]')
 parser.add_argument('--debug', action='store_true', default=False, help='Enable debug level output.')
 args = parser.parse_args()
 
@@ -451,15 +451,20 @@ if __name__ == '__main__':
             analysis_results = analyze_data(market=user_market, interval='1h')
 
             if analysis_results['success'] == True:
-                analysis_update = analysis_results['result'].copy()
+                analysis_document = analysis_results['result'].copy()
+                analysis_document['time'] = datetime.datetime.utcnow().isoformat()
+                analysis_document['module'] = 'flowmeter'
 
-                pprint(analysis_update)
+                pprint(analysis_document)
 
-                logger.info('Updating analysis database.')
+                #logger.info('Updating analysis database.')
+                logger.info('Creating new analysis document.')
 
-                update_result = db[collections['analysis']].update_one({'_id': user_market}, {'$set': analysis_update}, upsert=True)
-                logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
-                logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+                #update_result = db[collections['analysis']].update_one({'_id': user_market}, {'$set': analysis_document}, upsert=True)
+                #logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                #logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+                inserted_id = db[collections['analysis']].insert_one(analysis_document).inserted_id
+                logger.debug('inserted_id: ' + str(inserted_id))
 
             else:
                 logger.error('Error while analyzing trade data.')
