@@ -54,7 +54,12 @@ binance_secret = config['binance']['secret']
 binance_client = BinanceClient(binance_api, binance_secret)
 binance_ws = BinanceSocketManager(binance_client)
 
-db = MongoClient(config['mongodb']['uri'])[config['mongodb']['db']]
+mongo_uri = config['mongodb']['uri']
+
+if mongo_uri == 'None':
+    mongo_uri = None
+
+db = MongoClient(mongo_uri)[config['mongodb']['db']]
 
 collections = {'data': config['mongodb']['collection_data'], 'analysis': config['mongodb']['collection_analysis']}
 
@@ -344,6 +349,9 @@ def analyze_data(exchange, market, interval='1h', start=None):
             #aggregate_result_current = db[collections['data']].aggregate(pipeline_current)
             aggregate_result_last = db.command('aggregate', collections['data'], cursor={}, pipeline=pipeline_last)
             #aggregate_result_last = db[collections['data']].aggregate(pipeline_last)
+
+            #print('AGGREGATE RESULTS CURRENT (KEYS):')
+            #[print(key) for key in aggregate_result_current]
 
             if aggregate_result_current['ok'] == 1 and aggregate_result_last['ok'] == 1:
                 #result_current = list(aggregate_result_current)[0]
