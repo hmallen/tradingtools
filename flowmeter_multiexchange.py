@@ -362,10 +362,10 @@ def analyze_data(exchange, market, interval='1h', start=None):
             analyze_return['result']['current']['price'][match] = round(result_current['price'], 8)
             analyze_return['result']['current']['amount'][match] = round(result_current['amount'], 8)
             analyze_return['result']['current']['count'][match] = result_current['count']
-            analyze_return['result']['last']['volume'][result_last['_id']] = result_last['volume']
-            analyze_return['result']['last']['price'][result_last['_id']] = round(result_last['price'], 8)
-            analyze_return['result']['last']['amount'][result_last['_id']] = round(result_last['amount'], 8)
-            analyze_return['result']['last']['count'][result_last['_id']] = result_last['count']
+            analyze_return['result']['last']['volume'][match] = result_last['volume']
+            analyze_return['result']['last']['price'][match] = round(result_last['price'], 8)
+            analyze_return['result']['last']['amount'][match] = round(result_last['amount'], 8)
+            analyze_return['result']['last']['count'][match] = result_last['count']
             analyze_return['result']['difference']['volume'][match]['absolute'] = vol_diff_absolute
             analyze_return['result']['difference']['volume'][match]['percent'] = vol_diff_percent
             analyze_return['result']['difference']['price'][match]['absolute'] = price_diff_absolute
@@ -416,9 +416,6 @@ def analysis_loop(backtest_duration):
                 #logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
                 inserted_id = db[collections['analysis']].insert_one(analysis_document).inserted_id
                 logger.debug('inserted_id: ' + str(inserted_id))
-                update_result = db[collections['analysis']].update_one({'_id': inserted_id}, {'$currentDate': {'updated': {'$type': 'timestamp'}}})
-                logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
-                logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
 
             else:
                 logger.error('Error while analyzing trade data.')
