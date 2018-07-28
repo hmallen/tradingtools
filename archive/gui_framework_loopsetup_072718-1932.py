@@ -60,17 +60,14 @@ class Display(threading.Thread):
         self.stickies['trade']['titles'] = tk.N
         self.stickies['trade']['text'] = tk.E
         self.stickies['trade']['variables'] = tk.W
-        self.stickies['trade']['buttons'] = tk.S
+        self.stickies['trade']['buttons'] = tk.W+tk.E
         self.stickies['trade']['span'] = tk.W+tk.E
 
         self.variables = {'trade': {}, 'analysis': {}}
         self.variables['trade']['price'] = tk.DoubleVar()
         self.variables['trade']['quantity'] = tk.DoubleVar()
         self.variables['trade']['amount'] = tk.DoubleVar()
-        #self.variables['trade']['side'] = tk.StringVar()
-        #self.variables['trade']['side'].set('N/A')
         self.variables['trade']['status'] = tk.StringVar()
-        #self.variables['trade']['status'].set('Last Update: N/A')
         self.variables['trade']['status'].set('Updating')
         self.update_last = {'trade': None, 'analysis': None}
 
@@ -111,8 +108,6 @@ class Display(threading.Thread):
         self.widget_grid['trade'][2][0] = ('text', 'quantity', False)
         self.widgets['trade']['text']['amount'] = tk.Label(self.root, text='Amount:')
         self.widget_grid['trade'][3][0] = ('text', 'amount', False)
-        #self.widgets['trade']['text'][ ] = tk.Label(self.root, text='Side:')
-        #self.widget_grid['trade'][4][0] = ('text', 'side', False)
 
         # Variables
         self.widgets['trade']['variables']['price'] = tk.Label(self.root, textvariable=self.variables['trade']['price'], compound=tk.RIGHT)
@@ -121,8 +116,6 @@ class Display(threading.Thread):
         self.widget_grid['trade'][2][1] = ('variables', 'quantity', False)
         self.widgets['trade']['variables']['amount'] = tk.Label(self.root, textvariable=self.variables['trade']['amount'])
         self.widget_grid['trade'][3][1] = ('variables', 'amount', False)
-        #self.widgets['trade']['variables']['side'] = tk.Label(self.root, textvariable=self.variables['trade']['side'])
-        #self.widget_grid['trade'][4][1] = ('variables', 'side', False)
 
         # Status Indicator
         self.widgets['trade']['variables']['status'] = tk.Label(self.root, textvariable=self.variables['trade']['status'])
@@ -130,7 +123,7 @@ class Display(threading.Thread):
 
         # Buttons
         self.widgets['trade']['buttons']['quit'] = tk.Button(self.root, text='Quit', command=self.stop_display)
-        self.widget_grid['trade'][5][0] = ('buttons', 'quit', True)
+        self.widget_grid['trade'][5][0] = ('buttons', 'quit', False)
 
         # Temporary Update Pending Message
         #self.widgets['trade']['text']['update_pending'] = tk.Label(self.root, text='Updating GUI data, please wait...')
@@ -180,7 +173,7 @@ class Display(threading.Thread):
                     selected_sticky = self.stickies['trade'][category]
                     logger.debug('selected_sticky: ' + str(selected_sticky))
 
-                    if span == False and category != 'buttons':
+                    if span == False:# and category != 'buttons':
                         self.widgets['trade'][category][element].grid(row=row_index, column=column_index, sticky=selected_sticky)
                     else:
                         logger.debug('Overriding selected sticky for column-spanning widget.')
@@ -390,6 +383,6 @@ class Display(threading.Thread):
 
 if __name__ == '__main__':
     root = tk.Tk()
-    app = Display(root, update_interval=5)
+    app = Display(root, update_interval=1)
     root.mainloop()
     root.destroy()

@@ -44,7 +44,7 @@ class Display(threading.Thread):
         self.images['trade']['arrow_sell'] = tk.PhotoImage(file='resources/gui/arrow_sell_small.gif')
 
         self.fonts = {'trade': {}, 'analysis': {}}
-        self.fonts['trade']['titles'] = ('Helvetica', 12)
+        self.fonts['trade']['titles'] = ('Helvetica', 14)
         self.fonts['trade']['text'] = ('Helvetica', 10)
         self.fonts['trade']['variables'] = ('Helvetica', 10)
         self.fonts['trade']['buttons'] = ('Helvetica', 10)
@@ -56,16 +56,21 @@ class Display(threading.Thread):
         self.colors['trade']['bg']['buy'] = 'green2'
         self.colors['trade']['bg']['sell'] = 'red2'
 
-        # Create dynamically updating GUI variables
+        self.stickies = {'trade': {}, 'analysis': {}}
+        self.stickies['trade']['titles'] = tk.N
+        self.stickies['trade']['text'] = tk.E
+        self.stickies['trade']['variables'] = tk.W
+        self.stickies['trade']['buttons'] = None#tk.N
+        self.stickies['trade']['span'] = tk.W+tk.E
+
         self.variables = {'trade': {}, 'analysis': {}}
         self.variables['trade']['price'] = tk.StringVar()
-        self.variables['trade']['quantity'] = tk.StringVar()
-        self.variables['trade']['amount'] = tk.StringVar()
-        self.variables['trade']['status'] = tk.StringVar()
-        # Give variables initial values
         self.variables['trade']['price'].set("{:.8f}".format(0))
+        self.variables['trade']['quantity'] = tk.StringVar()
         self.variables['trade']['quantity'].set("{:.2f}".format(0))
+        self.variables['trade']['amount'] = tk.StringVar()
         self.variables['trade']['amount'].set("{:.4f}".format(0))
+        self.variables['trade']['status'] = tk.StringVar()
         self.variables['trade']['status'].set('Updating')
 
         self.update_last = {'trade': None, 'analysis': None}
@@ -82,41 +87,50 @@ class Display(threading.Thread):
         - Quit button
         """
 
-        ## Create Frames ##
-        self.trade_frame = tk.Frame(self.root)
-        #self.analysis_frame = tk.Frame(self.root)
-        self.buttons_frame = tk.Frame(self.root)
-
-        self.trade_frame.grid(row=0)
-        #self.analysis_frame.grid(row=0, column=1)
-        self.buttons_frame.grid(row=1)
-
-        ## Create Widgets ##
         # Create dictionary for widget storage
         self.widgets = {'trade': {'titles': {}, 'text': {}, 'variables': {}, 'buttons': {}},
                         'analysis': {'titles': {}, 'text': {}, 'variables': {}, 'buttons': {}}}
 
+        ## Create widgets ##
         # Trade Title
-        self.widgets['trade']['titles']['main'] = tk.Label(self.trade_frame, text='Last Trade')
+        self.widgets['trade']['titles']['main'] = tk.Label(self.root, text='Last Trade')
 
         self.colors['transparent'] = self.widgets['trade']['titles']['main'].cget('bg')   # Save OS-dependent "transparent" background color name
         logger.debug('self.colors[\'transparent\']: ' + self.colors['transparent'])
 
         # Text Labels
-        self.widgets['trade']['text']['price'] = tk.Label(self.trade_frame, text='Price:')
-        self.widgets['trade']['text']['quantity'] = tk.Label(self.trade_frame, text='Quantity:')
-        self.widgets['trade']['text']['amount'] = tk.Label(self.trade_frame, text='Amount:')
+        self.widgets['trade']['text']['price'] = tk.Label(self.root, text='Price:')
+        self.widgets['trade']['text']['quantity'] = tk.Label(self.root, text='Quantity:')
+        self.widgets['trade']['text']['amount'] = tk.Label(self.root, text='Amount:')
 
         # Variables
-        self.widgets['trade']['variables']['price'] = tk.Label(self.trade_frame, textvariable=self.variables['trade']['price'], compound=tk.RIGHT)
-        self.widgets['trade']['variables']['quantity'] = tk.Label(self.trade_frame, textvariable=self.variables['trade']['quantity'])
-        self.widgets['trade']['variables']['amount'] = tk.Label(self.trade_frame, textvariable=self.variables['trade']['amount'])
+        self.widgets['trade']['variables']['price'] = tk.Label(self.root, textvariable=self.variables['trade']['price'], compound=tk.RIGHT)
+        self.widgets['trade']['variables']['quantity'] = tk.Label(self.root, textvariable=self.variables['trade']['quantity'])
+        self.widgets['trade']['variables']['amount'] = tk.Label(self.root, textvariable=self.variables['trade']['amount'])
 
         # Status Indicator
-        self.widgets['trade']['variables']['status'] = tk.Label(self.trade_frame, textvariable=self.variables['trade']['status'])
+        self.widgets['trade']['variables']['status'] = tk.Label(self.root, textvariable=self.variables['trade']['status'])
 
         # Buttons
-        self.widgets['trade']['buttons']['quit'] = tk.Button(self.buttons_frame, text='Quit', command=self.stop_display)
+        self.widgets['trade']['buttons']['quit'] = tk.Button(self.root, text='Quit', command=self.stop_display)
+
+        # Create multidemensional array for widget grid layout
+        self.widget_grid = {'trade': None, 'analysis': None}
+
+        self.widget_grid['trade'] = [
+            [('titles', 'main', True), None],
+            [('text', 'price', False), ('variables', 'price', False)],
+            [('text', 'quantity', False), ('variables', 'quantity', False)],
+            [('text', 'amount', False), ('variables', 'amount', False)],
+            [None, None],
+            [('variables', 'status', True), None],
+            [None, ('buttons', 'quit', False)]
+        ]
+
+        # Variables to signal state of data
+        self.trade_data_ready = False
+        self.analysis_data_ready = False
+        self.gui_data_ready = False
 
         # Format Text
         for category in self.widgets['trade']:
@@ -133,21 +147,39 @@ class Display(threading.Thread):
                 if category == 'variables':
                     self.widgets['trade'][category][element].config(bg=self.colors['trade']['bg']['notready'])
 
-        ## Create Grid Layout ##
-        self.widgets['trade']['titles']['main'].grid(row=0, columnspan=2)
+        # Construct grid layout
+        for row in self.widget_grid['trade']:
+            row_index = self.widget_grid['trade'].index(row)
+            logger.debug('row_index: ' + str(row_index))
 
-        self.widgets['trade']['text']['price'].grid(row=1, column=0, sticky=tk.E); self.widgets['trade']['variables']['price'].grid(row=1, column=1, sticky=tk.W)
-        self.widgets['trade']['text']['quantity'].grid(row=2, column=0, sticky=tk.E); self.widgets['trade']['variables']['quantity'].grid(row=2, column=1, sticky=tk.W)
-        self.widgets['trade']['text']['amount'].grid(row=3, column=0, sticky=tk.E); self.widgets['trade']['variables']['amount'].grid(row=3, column=1, sticky=tk.W)
+            for column in self.widget_grid['trade'][row_index]:
+                column_index = self.widget_grid['trade'][row_index].index(column)
+                logger.debug('column_index: ' + str(column_index))
 
-        self.widgets['trade']['variables']['status'].grid(row=4, columnspan=2, sticky=tk.E+tk.W)
+                if column == None:
+                    continue
+                else:
+                    category = self.widget_grid['trade'][row_index][column_index][0]
+                    logger.debug('category: ' + category)
 
-        self.widgets['trade']['buttons']['quit'].grid(row=5, columnspan=2)
+                    element = self.widget_grid['trade'][row_index][column_index][1]
+                    logger.debug('element: ' + element)
 
-        # Variables to signal state of data
-        self.trade_data_ready = False
-        self.analysis_data_ready = False
-        self.gui_data_ready = False
+                    span = self.widget_grid['trade'][row_index][column_index][2]
+                    logger.debug('span: ' + str(span))
+
+                    selected_sticky = self.stickies['trade'][category]
+                    logger.debug('selected_sticky: ' + str(selected_sticky))
+
+                    if span == False:# and category != 'buttons':
+                        self.widgets['trade'][category][element].grid(row=row_index, column=column_index, sticky=selected_sticky)
+                    else:
+                        logger.debug('Overriding selected sticky for column-spanning widget.')
+
+                        selected_sticky = self.stickies['trade']['span']
+                        logger.debug('selected_sticky: ' + str(selected_sticky))
+
+                        self.widgets['trade'][category][element].grid(row=row_index, column=column_index, columnspan=len(row), sticky=selected_sticky)
 
     def stop_display(self):
         self.display_active = False
