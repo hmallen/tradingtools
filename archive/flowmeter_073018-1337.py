@@ -22,7 +22,8 @@ config_path = 'config/config.ini'
 parser = argparse.ArgumentParser()
 parser.add_argument('-e', '--exchange', type=str, default=None, help='Exchange for analysis (ex. binance / poloniex).')
 parser.add_argument('-m', '--market', type=str, default=None, help='Market for analysis (ex. XLMBTC).')
-parser.add_argument('-l', '--loop', type=int, default=30, help='Time (seconds) between each analysis run (ex. 15). [Default: 30]')
+parser.add_argument('-b', '--backtest', type=str, default=None, help='Length of time for historical trade data analysis (ex. 3 hours).')
+parser.add_argument('-l', '--loop', type=int, default=10, help='Time (seconds) between each analysis run (ex. 30). [Default: 10]')
 parser.add_argument('-c', '--clear', action='store_true', default=False, help='Clear all documents for requested market from database and start fresh.')
 parser.add_argument('--debug', action='store_true', default=False, help='Enable debug level output.')
 args = parser.parse_args()
@@ -58,14 +59,13 @@ binance_ws = BinanceSocketManager(binance_client)
 
 class FlowMeter:
 
-    def __init__(self, exchange=None, market=None, loop_time=10, clear_db=False):
+    def __init__(self, exchange=None, market=None, backtest_duration=None, loop_time=10, clear_db=False):
         try:
             self.user_exchange = exchange
             self.user_market = market
             self.loop_time = loop_time
 
-            self.backtest_durations = [('1m', '1 minute'), ('5m', '5 minutes'), ('15m', '15 minutes'), ('30m', '30 minutes'), ('1h', '1 hour'),
-                                       ('2h', '2 hours'), ('4h', '4 hours'), ('6h', '6 hours'), ('12h', '12 hours'), ('1d', '1 day')]
+            #self.collections = {'data': config['mongodb']['collection_data'], 'analysis': config['mongodb']['collection_analysis']}
 
             trade_sockets = {}
 
@@ -85,6 +85,11 @@ class FlowMeter:
 
                 exchange_input = int(input('Choose an exchange: '))
 
+                #if exchange_input == 1:
+                    #self.user_exchange = 'binance'
+                #elif exchange_input == 2:
+                    #self.user_exchange == 'poloniex'
+                #else:
                 try:
                     self.user_exchange = available_exchanges[exchange_input - 1]
                 except:
@@ -113,6 +118,39 @@ class FlowMeter:
                 else:
                     logger.debug('self.user_market: ' + self.user_market)
 
+            if backtest_duration == None:
+                backtest_duration = input('Input time length for backtesting/analysis (ex. 30 seconds/9 minutes/3 hours/2 days/1 week): ')
+
+            backtest_duration_formatted = backtest_duration + ' ago UTC'
+            logger.debug('backtest_duration_formatted: ' + backtest_duration_formatted)
+
+            try:
+                logger.debug('Testing user-provided historical data population input.')
+                historical_trades = binance_client.aggregate_trade_iter(symbol=self.user_market, start_str=backtest_duration_formatted)
+                logger.debug('Attempting count of trades in generator object.')
+                trade_count = sum(1 for trade in historical_trades)
+            except Exception as e:
+                logger.exception(e)
+                logger.error('Invalid input for start of historical data population. Exiting.')
+                sys.exit(1)
+
+            if self.user_market == None or backtest_duration == None:
+                logger.error('Failed to gather valid user input. Exiting.')
+                sys.exit(1)
+
+            self.user_backtest_duration = backtest_duration
+
+            self.backtest_interval = ''
+            for char in self.user_backtest_duration:
+                if char.isnumeric() == True:
+                    self.backtest_interval += char
+                elif char == ' ':
+                    continue
+                elif char.isalpha():
+                    self.backtest_interval += char
+                    break
+            logger.debug('self.backtest_interval: ' + self.backtest_interval)
+
             ## Delete existing data for market from database, if requested ##
             if clear_db == True:
                 print('WARNING: Selected option to delete all database documents for ' + self.user_exchange.capitalize() + '-' + self.user_market.upper() + '.')
@@ -132,9 +170,8 @@ class FlowMeter:
                     sys.exit(1)
 
             ## Check for existing documents for exchange/market and calculate duration of missing trades ##
+            populate_missing = False
             trade_id_last = None
-            trade_dt_first = None
-            populate_extended = False
 
             if clear_db == False:
                 missing_trades_result = self.check_missing_trades(self.user_exchange, self.user_market)
@@ -146,20 +183,28 @@ class FlowMeter:
                     missing_duration_message = missing_trades_result['result']['missing_duration']
                     logger.debug('missing_duration_message: ' + missing_duration_message)
 
-                    logger.info('Requested filling-in of database with all missing trade data.')
+                    populate_input_message = 'Populate database with missing data?'
+                    if 'day' in missing_duration_message or 'week' in missing_duration_message or 'month' in missing_duration_message or 'year' in missing_duration_message:
+                        populate_input_message += ' (This could take a while...)'
+                    populate_input_message += ' [y/n]: '
 
-                    trade_id_last = missing_trades_result['result']['trade_id_last']
-                    logger.debug('trade_id_last: ' + str(trade_id_last))
+                    user_missing_choice = input(populate_input_message)
 
-                    trade_dt_first = missing_trades_result['result']['trade_dt_first']
-                    logger.debug('trade_dt_first: ' + str(trade_dt_first))
+                    if user_missing_choice.lower() == 'y':
+                        logger.info('Requested filling-in of database with all missing trade data.')
 
-                    if trade_dt_first > dateparser.parse('1 day ago'):
-                        logger.info('Performing extended backfill of trade data up to 2 days.')
+                        populate_missing = True
+                        logger.debug('populate_missing: ' + str(populate_missing))
 
-                        populate_extended = True
+                        trade_id_last = missing_trades_result['result']['trade_id_last']
+                        logger.debug('trade_id_last: ' + str(trade_id_last))
+
+                    elif user_missing_choice.lower() == 'n':
+                        logger.info('Not filling-in database with all missing trade data. Using 2x requested backtesting/analysis duration instead.')
+
                     else:
-                        logger.info('Database populated with >= 2 days of trade data. Skipping extended database backfill.')
+                        logger.error('Unrecognized selection for confirmation of database population with missing data. Exiting.')
+                        sys.exit(1)
 
                 elif missing_trades_result['result']['missing_duration'] == None:
                     print('No trade data found in database for ' + self.user_exchange.capitalize() + '-' + self.user_market.upper() + '.')
@@ -171,13 +216,11 @@ class FlowMeter:
             ## Populate database with historical trade data for extended backtesting/analysis ##
             logger.info('Populating database with historical trade data.')
 
-            populate_starts = []
-
             arguments = tuple()
-            keyword_arguments_base = {'exchange': self.user_exchange, 'market': self.user_market}
+            keyword_arguments = {'exchange': self.user_exchange, 'market': self.user_market}
 
-            if populate_extended == True:
-                backtest_delta = datetime.datetime.now(datetime.timezone.utc) - dateparser.parse('1 day ago UTC')
+            if populate_missing == False:
+                backtest_delta = datetime.datetime.now(datetime.timezone.utc) - dateparser.parse(backtest_duration_formatted)
                 logger.debug('backtest_delta: ' + str(backtest_delta))
 
                 populate_delta = (backtest_delta * 2) + datetime.timedelta(hours=1) # Populate with 2x + 1 extra hour of data
@@ -189,17 +232,17 @@ class FlowMeter:
                 populate_start = int(time.mktime(populate_start_dt.timetuple()) * 1000)
                 logger.debug('populate_start:' + str(populate_start))
 
-                populate_starts.append(('start_time', populate_start))
+                keyword_arguments['start_time'] = populate_start
+            else:
+                keyword_arguments['trade_id_last'] = trade_id_last
 
-            if trade_id_last != None:
-                populate_starts.append(('trade_id_last', trade_id_last))
-
-            logger.debug('populate_starts: ' + str(populate_starts))
+            logger.debug('keyword_arguments: ' + str(keyword_arguments))
 
             ## Initialize aggregated trade websocket for market ##
             logger.info('Initializing trade websocket for ' + self.user_exchange.capitalize() + '-' + self.user_market.upper() + '.')
 
             if self.user_exchange == 'binance':
+                #trade_sockets[self.user_market] = binance_ws.start_trade_socket(self.user_market, self.process_message)
                 trade_sockets[self.user_market] = binance_ws.start_aggtrade_socket(self.user_market, self.process_message)
 
                 ## Start websocket for market and begin processing data ##
@@ -211,29 +254,18 @@ class FlowMeter:
                 logger.error('Only Binance functions currently implemented. Exiting.')
                 sys.exit(1)
 
-            populate_count = len(populate_starts)
-            logger.debug('populate_count: ' + str(populate_count))
+            populate_proc = Process(target=self.populate_historical, args=arguments, kwargs=keyword_arguments)
 
-            count = 0
-            for pop in populate_starts:
-                count += 1
-
-                keyword_arguments = keyword_arguments_base.copy()
-                keyword_arguments[pop[0]] = pop[1]
-
-                logger.debug('keyword_arguments: ' + str(keyword_arguments))
-
-                populate_proc = Process(target=self.populate_historical, args=arguments, kwargs=keyword_arguments)
-
-                logger.debug('Starting populate database process #' + str(count) + ' of ' + str(populate_count) + '.')
-                populate_proc.start()
-                logger.debug('Joining populate database process #' + str(count) + ' of ' + str(populate_count) + '.')
-                populate_proc.join()
-                logger.debug('Populate database process #' + str(count) + ' of ' + str(populate_count) + ' complete.')
+            logger.debug('Starting populate database process.')
+            populate_proc.start()
+            logger.debug('Joining populate database process.')
+            populate_proc.join()
+            logger.debug('Populate database process complete.')
 
             logger.info('Database ready for analysis.')
 
             arguments = tuple()
+            #keyword_arguments = {'backtest_duration': backtest_duration}
             keyword_arguments = {}
 
             analysis_proc = Process(target=self.analysis_loop, args=arguments, kwargs=keyword_arguments)
@@ -368,7 +400,7 @@ class FlowMeter:
 
 
     def check_missing_trades(self, exchange, market):
-        check_missing_return = {'success': True, 'result': {'trade_dt_first': None, 'trade_id_last': None, 'missing_timedelta': None, 'missing_duration': None}}
+        check_missing_return = {'success': True, 'result': {'trade_id_last': None, 'missing_timedelta': None, 'missing_duration': None}}
 
         try:
             aggregation_pipeline = []
@@ -482,38 +514,6 @@ class FlowMeter:
                     check_missing_return['result']['missing_duration'] = duration_readable
                     logger.debug('check_missing_return[\'result\'][\'missing_duration\']: ' + check_missing_return['result']['missing_duration'])
 
-                    # Get datetime of first trade in database
-                    aggregation_pipeline = []
-
-                    match_pipeline = {'$match': {'exchange': exchange, 'market': market}}
-                    logger.debug('match_pipeline: ' + str(match_pipeline))
-
-                    aggregation_pipeline.append(match_pipeline)
-
-                    sort_pipeline = {'$sort': {'_id': 1}}
-                    logger.debug('sort_pipeline' + str(sort_pipeline))
-
-                    aggregation_pipeline.append(sort_pipeline)
-
-                    limit_pipeline = {'$limit': 1}
-                    logger.debug('limit_pipeline' + str(limit_pipeline))
-
-                    aggregation_pipeline.append(limit_pipeline)
-
-                    logger.debug('aggregation_pipeline' + str(aggregation_pipeline))
-
-                    aggregation_result = db.command('aggregate', collections['data'], cursor={}, pipeline=aggregation_pipeline)
-
-                    logger.debug('aggregation_result[\'ok\']: ' + str(aggregation_result['ok']))
-
-                    if aggregation_result['ok'] == 1:
-                        if len(aggregation_result['cursor']['firstBatch']) > 0:
-                            trade_first = aggregation_result['cursor']['firstBatch'][0]
-                            logger.debug('trade_first: ' + str(trade_first))
-
-                            check_missing_return['result']['trade_dt_first'] = datetime.datetime.fromtimestamp(float(trade_first['trade_time']) / 1000)
-                            logger.debug('check_missing_return[\'result\'][\'trade_dt_first\']: ' + str(check_missing_return['result']['trade_dt_first']))
-
                 else:
                     logger.info('No trade data found for ' + exchange.capitalize() + '-' + market.upper() + '.')
 
@@ -528,6 +528,11 @@ class FlowMeter:
 
     def populate_historical(self, exchange, market, start_time=None, trade_id_last=None):
         if exchange == 'binance':
+            #binance_api = config['binance']['api']
+            #binance_secret = config['binance']['secret']
+
+            #binance_client = BinanceClient(binance_api, binance_secret)
+
             keyword_arguments = {'symbol': market}
 
             if trade_id_last == None:
@@ -553,6 +558,7 @@ class FlowMeter:
                 if process_result == False:
                     logger.info('Database population complete.')
                     break
+                    #logger.info('Trade document already present in database.')
                 else:
                     count += 1
                     completion_percentage = "{:.2f}".format((count / trade_count) * 100)
@@ -762,57 +768,54 @@ class FlowMeter:
                         logger.warning('Failed to retrieve results from aggregation pipeline.')
                         logger.exception(e)
 
+            # Calculate difference between requested interval start and first document trade time
+            # Can use to warn user about data missing from requested calculation
+            #first_doc_time = xyz
+
         except Exception as e:
             logger.exception(e)
 
             analyze_return['success'] = False
-
-        except KeyboardInterrupt:
-            logger.info('Exit signal received while analyzing data.')
-            raise
 
         finally:
             return analyze_return
 
 
     def analysis_loop(self):
-        delay_start = 0
-
         while (True):
             try:
+                delay_start = time.time()
                 while (time.time() - delay_start) < self.loop_time:
                     time.sleep(1)
 
                 logger.info('Analyzing trade data.')
 
-                for backtest in self.backtest_durations:
-                    logger.debug('backtest: ' + str(backtest))
+                analysis_results = self.analyze_data(exchange=self.user_exchange, market=self.user_market, interval=self.backtest_interval)
 
-                    analysis_results = self.analyze_data(exchange=self.user_exchange, market=self.user_market, interval=backtest[0])
+                if analysis_results['success'] == True:
+                    analysis_document = analysis_results['result'].copy()
+                    analysis_document['module'] = 'flowmeter'
+                    analysis_document['exchange'] = self.user_exchange
+                    analysis_document['market'] = self.user_market
+                    analysis_document['interval'] = self.user_backtest_duration
+                    #analysis_document['updated'] = time.mktime(datetime.datetime.now().timetuple())
+                    analysis_document['updated'] = datetime.datetime.now().isoformat()
 
-                    if analysis_results['success'] == True:
-                        analysis_document = analysis_results['result'].copy()
-                        analysis_document['_id'] = self.user_exchange + '-' + self.user_market + '-' + backtest[0]
-                        analysis_document['module'] = 'flowmeter'
-                        analysis_document['exchange'] = self.user_exchange
-                        analysis_document['market'] = self.user_market
-                        analysis_document['interval'] = backtest[1]
-                        analysis_document['updated'] = time.mktime(datetime.datetime.now().timetuple())
-                        #analysis_document['updated'] = datetime.datetime.now().isoformat()
+                    pprint(analysis_document)
 
-                        pprint(analysis_document)
+                    logger.info('Updating analysis database.')
+                    #logger.info('Creating new analysis document.')
 
-                        logger.info('Updating analysis database.')
+                    #update_result = db[collections['analysis']].update_one({'_id': self.user_market}, {'$set': analysis_document}, upsert=True)
+                    update_result = db[collections['analysis']].update_one({'exchange': self.user_exchange, 'market': self.user_market, 'interval': self.user_backtest_duration},
+                                                                           {'$set': analysis_document}, upsert=True)
+                    logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                    logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+                    #inserted_id = db[collections['analysis']].insert_one(analysis_document).inserted_id
+                    #logger.debug('inserted_id: ' + str(inserted_id))
 
-                        update_result = db[collections['analysis']].update_one({'_id': analysis_document['_id']},
-                                                                               {'$set': analysis_document}, upsert=True)
-                        logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
-                        logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
-
-                    else:
-                        logger.error('Error while analyzing trade data.')
-
-                delay_start = time.time()
+                else:
+                    logger.error('Error while analyzing trade data.')
 
             except Exception as e:
                 logger.exception(e)
@@ -832,6 +835,7 @@ if __name__ == '__main__':
     # Gather varialbles from program arguments
     user_exchange = args.exchange
     user_market = args.market
+    backtest_duration = args.backtest
     loop_time = args.loop
 
     if user_exchange != None:
@@ -839,4 +843,25 @@ if __name__ == '__main__':
     if user_market != None:
         user_market = user_market.upper()
 
-    flow_meter = FlowMeter(exchange=user_exchange, market=user_market, loop_time=loop_time)
+    flow_meter = FlowMeter(exchange=user_exchange, market=user_market,
+                           backtest_duration=backtest_duration, loop_time=loop_time)
+
+    """
+    except Exception as e:
+        logger.exception(e)
+
+    except KeyboardInterrupt:
+        logger.info('Exit signal received.')
+
+    finally:
+        if reactor.running:
+            logger.info('Closing Binance socket manager.')
+            binance_ws.close()
+
+            logger.info('Stopping reactor.')
+            reactor.stop()
+        else:
+            logger.info('No websocket connected or reactor running.')
+
+        logger.info('Exiting.')
+    """
