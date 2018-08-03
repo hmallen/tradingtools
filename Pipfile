@@ -9,6 +9,7 @@ name = "pypi"
 
 python-binance = "*"
 pymongo = "*"
+numpy = "*"
 
 
 [dev-packages]

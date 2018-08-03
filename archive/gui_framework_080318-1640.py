@@ -11,11 +11,6 @@ import threading
 
 from pymongo import MongoClient
 
-from binance.client import Client as BinanceClient
-from binance.depthcache import DepthCacheManager
-from binance.websockets import BinanceSocketManager
-from twisted.internet import reactor
-
 import tkinter as tk
 from tkinter import font
 from tkinter import ttk
@@ -36,16 +31,7 @@ if mongo_uri == 'localhost':
 
 db = MongoClient(mongo_uri)[config['mongodb']['db']]
 
-collections = {
-    'data': config['mongodb']['collection_data'],
-    'analysis': config['mongodb']['collection_analysis'],
-    'candles': config['mongodb']['collection_candles']
-}
-
-binance_api = config['binance']['api']
-binance_secret = config['binance']['secret']
-
-binance_client = BinanceClient(binance_api, binance_secret)
+collections = {'data': config['mongodb']['collection_data'], 'analysis': config['mongodb']['collection_analysis']}
 
 
 class Display(threading.Thread):
@@ -82,6 +68,14 @@ class Display(threading.Thread):
                 }
             }
         }
+        #self.fonts['titles'] = font.Font(family='Helvetica', size=11, weight='bold', underline=1)
+        #self.fonts['text'] = font.Font(family='Helvetica', size=9, weight='bold')
+        #self.fonts['variables'] = font.Font(family='Helvetica', size=9)
+        #self.fonts['menus'] = font.Font(family='Helvetica', size=9)
+        #self.fonts['labelframes'] = {
+            #'main': font.Font(family='Helvetica', size=11, weight='bold'),#, underline=1),
+            #'sub': font.Font(family='Helvetica', size=9, weight='bold')#, underline=1)
+        #}
 
         self.colors = {'bg': {}, 'text': {}, 'transparent': None}
         self.colors['bg']['ready'] = 'green4'
@@ -89,10 +83,6 @@ class Display(threading.Thread):
         self.colors['bg']['warning'] = 'red'
         self.colors['bg']['positive'] = 'green2'
         self.colors['bg']['negative'] = 'red2'
-        self.colors['bg']['orderbook'] = {
-            'asks': 'tomato',
-            'bids': 'sea green'
-        }
 
         #### Variables ####
         self.variables = {
@@ -105,12 +95,7 @@ class Display(threading.Thread):
                     'price': tk.StringVar(),
                     'quantity': tk.StringVar(),
                     'amount': tk.StringVar()
-                },
-                'orderbook': {
-                    'bids': tk.StringVar(),
-                    'asks': tk.StringVar()
-                },
-                'differential': tk.DoubleVar()
+                }
             },
             'analysis': {
                 'buys': {
@@ -272,28 +257,8 @@ class Display(threading.Thread):
             }
         }
 
-        # Variables to signal state of data
-        self.trade_data_ready = False
-        self.analysis_data_ready = False
-        self.gui_data_ready = False
-
-        self.update_last = {'trade': None, 'analysis': None, 'menu': None}
-
-        # Trace Combobox Variables and Route to Callback Function
-        self.variables['menu']['exchange'].trace('w', self.combobox_trace)
-        self.variables['menu']['market'].trace('w', self.combobox_trace)
-        self.variables['menu']['interval'].trace('w', self.combobox_trace)
-
-        # Orderbook Variables and Route to Callback Function
-        #self.variables['trade']['orderbook']['bids'].trace('w', self.orderbook_trace)
-        #self.variables['trade']['orderbook']['asks'].trace('w', self.orderbook_trace)
-
-        # Give variables initial values
-        self.variables['trade']['orderbook']['asks'].set('Updating')
-        self.variables['trade']['orderbook']['bids'].set('Updating')
-
-        self.variables['trade']['differential'].set(50.0)
-
+        ## Give variables initial values ##
+        # Menu Variables
         self.variables['menu']['status'].set('Updating')
 
         ## Combobox Selection Variables ##
@@ -303,16 +268,15 @@ class Display(threading.Thread):
         self.combobox_markets = None
         self.combobox_intervals = None
 
-        # Binance Websocket-based Features
-        self.binance_dcm = None
-
         logger.info('Gathering available exchange, market, and interval information.')
 
-        process_combobox_result = self.process_combobox_selections()
+        update_available_result = self.update_available_analysis()
 
-        if process_combobox_result['success'] == False:
+        if update_available_result['success'] == False:
             logger.error('Error while updating available analysis exchanges and markets. Exiting.')
             sys.exit(1)
+
+        self.update_last = {'trade': None, 'analysis': None, 'menu': None}
 
         self.create_widgets()
 
@@ -326,34 +290,19 @@ class Display(threading.Thread):
         - Quit button
         """
 
-        #### Define TTK Styles ####
-        #progressbar_style = ttk.Style()
-        #progressbar_style.config('Horizontal.TProgressbar')
+        ### Create Frames ####
+        #self.root_frame = tk.Frame(self.root)
 
-        #### Create Frames ####
         self.trade_frame = {
             'master': tk.Frame(self.root)
         }
 
         trade_subframes = {
             'active_market': tk.Frame(self.trade_frame['master']),
-            'last_trade': tk.LabelFrame(self.trade_frame['master'], text='Last Trade', font=self.fonts['trade']['labelframes']['main']),
-            'orderbook': {
-                'main': tk.LabelFrame(self.trade_frame['master'], text='Orderbook', font=self.fonts['trade']['labelframes']['main']),
-                'asks': None,
-                'bids': None
-            },
-            'differential': tk.LabelFrame(self.trade_frame['master'], text='Differential', font=self.fonts['trade']['labelframes']['main'])
+            'last_trade': tk.LabelFrame(self.trade_frame['master'], text='Last Trade', font=self.fonts['trade']['labelframes']['main'])
         }
 
         self.trade_frame.update(trade_subframes)
-
-        orderbook_subframes = {
-            'asks': tk.LabelFrame(self.trade_frame['orderbook']['main'], text='Asks', font=self.fonts['trade']['labelframes']['sub'], bd=0, labelanchor=tk.NW),
-            'bids': tk.LabelFrame(self.trade_frame['orderbook']['main'], text='Bids', font=self.fonts['trade']['labelframes']['sub'], bd=0, labelanchor=tk.SW)
-        }
-
-        self.trade_frame['orderbook'].update(orderbook_subframes)
 
         logger.debug('self.trade_frame: ' + str(self.trade_frame))
 
@@ -440,38 +389,6 @@ class Display(threading.Thread):
                         'quantity': tk.Label(self.trade_frame['last_trade'], textvariable=self.variables['trade']['last_trade']['quantity']),
                         'amount': tk.Label(self.trade_frame['last_trade'], textvariable=self.variables['trade']['last_trade']['amount'])
                     }
-                },
-                'orderbook': {
-                    'titles': {},
-                    'text': {},
-                    'variables': {
-                        'bids': tk.Label(
-                            self.trade_frame['orderbook']['bids'],
-                            textvariable=self.variables['trade']['orderbook']['bids'],
-                            bg=self.colors['bg']['updating'],
-                            justify=tk.LEFT,
-                            #anchor=tk.W,
-                            #width=20
-                        ),
-                        'asks': tk.Label(
-                            self.trade_frame['orderbook']['asks'],
-                            textvariable=self.variables['trade']['orderbook']['asks'],
-                            bg=self.colors['bg']['updating'],
-                            justify=tk.LEFT,
-                            #anchor=tk.W,
-                            #width=20
-                        )
-                    }#,
-                    #'separator': ttk.Separator(self.trade_frame['orderbook']['main'], orient=tk.HORIZONTAL)
-                },
-                'differential': {
-                    'progressbar': ttk.Progressbar(
-                        self.trade_frame['differential'],
-                        mode='determinate',
-                        orient=tk.HORIZONTAL,
-                        variable=self.variables['trade']['differential']
-                    ),
-                    'text': tk.Label(self.trade_frame['differential'], textvariable=self.variables['trade']['differential'], font=('Helvetica', 14, 'bold'))
                 }
             },
             'analysis': {
@@ -780,62 +697,69 @@ class Display(threading.Thread):
             for category in self.widgets[header]:
                 logger.debug('category: ' + category)
 
-                if category != 'differential':
-                    for element in self.widgets[header][category]:
-                        logger.debug('element: ' + element)
+                for element in self.widgets[header][category]:
+                    logger.debug('element: ' + element)
 
-                        #if element != 'separator':
-                        if header == 'trade':
-                            selected_font = self.fonts[header][element]
+                    if header == 'trade':
+                        selected_font = self.fonts[header][element]
+                        logger.debug('selected_font: ' + str(selected_font))
+
+                        for section in self.widgets[header][category][element]:
+                            self.widgets[header][category][element][section].config(font=selected_font)
+
+                    elif header == 'analysis':
+                        if category == 'titles':
+                            selected_font = self.fonts[header][category]
                             logger.debug('selected_font: ' + str(selected_font))
 
-                            for section in self.widgets[header][category][element]:
-                                self.widgets[header][category][element][section].config(font=selected_font)
-
-                        elif header == 'analysis':
-                            if category == 'titles':
-                                selected_font = self.fonts[header][category]
-                                logger.debug('selected_font: ' + str(selected_font))
-
-                                self.widgets[header][category][element].config(font=selected_font)
-
-                            else:
-                                for section in self.widgets[header][category][element]:
-                                    logger.debug('section: ' + section)
-
-                                    selected_font = self.fonts[header][section]
-                                    logger.debug('selected_font: ' + str(selected_font))
-
-                                    for label in self.widgets[header][category][element][section]:
-                                        logger.debug('label: ' + label)
-
-                                        if element == 'difference' and section == 'variables':
-                                                for data_type in self.widgets[header][category][element][section][label]:
-                                                    logger.debug('data_type: ' + data_type)
-
-                                                    self.widgets[header][category][element][section][label][data_type].config(font=selected_font)
-
-                                        else:
-                                            self.widgets[header][category][element][section][label].config(font=selected_font)
+                            self.widgets[header][category][element].config(font=selected_font)
 
                         else:
-                            logger.debug('No font formatting implemented for ' + header + '.')
+                            for section in self.widgets[header][category][element]:
+                                logger.debug('section: ' + section)
+
+                                selected_font = self.fonts[header][section]
+                                logger.debug('selected_font: ' + str(selected_font))
+
+                                for label in self.widgets[header][category][element][section]:
+                                    logger.debug('label: ' + label)
+
+                                    if element == 'difference' and section == 'variables':
+                                            for data_type in self.widgets[header][category][element][section][label]:
+                                                logger.debug('data_type: ' + data_type)
+
+                                                self.widgets[header][category][element][section][label][data_type].config(font=selected_font)
+
+                                        #else:
+                                            #self.widgets[header][category][element][section][label].config(font=selected_font)
+                                    else:
+                                        self.widgets[header][category][element][section][label].config(font=selected_font)
+
+                    else:
+                        logger.debug('No font formatting implemented for ' + header + '.')
+
+        """
+        def OptionCallBack(*args):
+            print variable.get()
+            print so.current()
+
+        variable = StringVar(app)
+        variable.set("Select From List")
+        variable.trace('w', OptionCallBack)
+
+
+        so = ttk.Combobox(app, textvariable=variable)
+        so.config(values =('Tracing Upstream', 'Tracing Downstream','Find Path'))
+        so.grid(row=1, column=4, sticky='E', padx=10)
+        """
 
         #### Create Grid Layout ####
 
         ## Trade Frames ##
         self.trade_frame['master'].grid(row=0, column=0, rowspan=2, padx=5, pady=1, sticky=tk.E)
 
-        self.trade_frame['active_market'].grid(row=0, column=0, padx=2, pady=15)#, sticky=tk.N)
-        self.trade_frame['last_trade'].grid(row=1, column=0, padx=2, pady=15)
-
-        self.trade_frame['orderbook']['main'].grid(row=2, column=0, padx=2, pady=15)
-
-        self.trade_frame['orderbook']['asks'].grid(row=0, column=0, padx=2, sticky=tk.SW+tk.SE)
-        #self.widgets['trade']['orderbook']['separator'].grid(row=1, column=0, sticky=tk.W+tk.E)    # Separator Widget
-        self.trade_frame['orderbook']['bids'].grid(row=1, column=0, padx=2, sticky=tk.SW+tk.SE)
-
-        self.trade_frame['differential'].grid(row=3, column=0, padx=2, pady=15)
+        self.trade_frame['active_market'].grid(row=0, column=0, padx=2, pady=30)#, sticky=tk.N)
+        self.trade_frame['last_trade'].grid(row=1, column=0, padx=2)
 
         ## Analysis Frames ##
 
@@ -886,14 +810,6 @@ class Display(threading.Thread):
         self.widgets['trade']['last_trade']['variables']['price'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['trade']['last_trade']['variables']['quantity'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['trade']['last_trade']['variables']['amount'].grid(row=2, column=1, sticky=tk.W, padx=2, pady=1)
-
-        # Orderbook Trade Variable Widgets
-        self.widgets['trade']['orderbook']['variables']['asks'].grid(row=0, column=0, sticky=tk.SW+tk.SE)
-        self.widgets['trade']['orderbook']['variables']['bids'].grid(row=1, column=0, sticky=tk.NW+tk.NE)
-
-        # Differential Widgets
-        self.widgets['trade']['differential']['progressbar'].grid(row=0, column=0, sticky=tk.W+tk.E)#sticky=tk.N+tk.S+tk.E+tk.W)
-        self.widgets['trade']['differential']['text'].grid(row=1, column=0, sticky=tk.S)
 
         ## Analysis Widgets ##
 
@@ -1060,44 +976,13 @@ class Display(threading.Thread):
 
         self.widgets['menu']['buttons']['quit'].grid(row=0, column=4, sticky=tk.SE, padx=30, pady=1)
 
-    def combobox_trace(self, *args):
-        logger.debug('args: ' + str(args))
+        # Variables to signal state of data
+        self.trade_data_ready = False
+        self.analysis_data_ready = False
+        self.gui_data_ready = False
 
-        logger.debug('Updating available analysis variables.')
-
-        process_combobox_result = self.process_combobox_selections()
-        logger.debug('process_combobox_result: ' + str(process_combobox_result))
-
-        if process_combobox_result['success'] == True:
-            logger.debug('Updating analysis display.')
-
-            update_analysis_result = self.update_analysis_values()
-
-            if update_analysis_result['success'] == True:
-                logger.debug('Updating background colors.')
-
-                if self.gui_data_ready == True:
-                    update_background_result = self.update_background_colors()
-
-                    if update_background_result['success'] == False:
-                        logger.error('Error while updating analysis display background colors.')
-
-                else:
-                    logger.info('GUI data not ready. Skipping background color update.')
-
-            else:
-                logger.error('Error while updating analysis display.')
-
-        else:
-            logger.error('Error while updating available analysis variables after combobox selection.')
-
-    def orderbook_trace(self, *args):
-        #self.widgets['trade']['orderbook']['variables']['asks'].config(bg=self.colors['bg']['orderbook']['asks'])
-        #self.widgets['trade']['orderbook']['variables']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])
-        pass
-
-    def process_combobox_selections(self):
-        process_combobox_return = {'success': True}
+    def update_available_analysis(self):
+        update_markets_return = {'success': True}
 
         try:
             analysis_documents = db[collections['analysis']].find({})
@@ -1127,7 +1012,7 @@ class Display(threading.Thread):
 
             if self.variables['menu']['market'].get() == '':
                 self.variables['menu']['market'].set(self.combobox_markets[0])
-            elif self.variables['menu']['market'].get() not in self.combobox_markets:
+            elif self.variables['menu']['markets'].get() not in self.combobox_markets:
                 # HANDLE SITUATION WHERE DATA CEASES TO EXIST FOR CURRENT MARKET SELECTION
                 pass
             else:
@@ -1165,60 +1050,18 @@ class Display(threading.Thread):
 
             self.variables['trade']['active_market']['exchange_market'].set(active_market_main)
 
-            interval_display_variable = self.variables['menu']['interval'].get()
-            if interval_display_variable[-1] == 's':
-                interval_display_variable = interval_display_variable[:-1]
-            logger.debug('interval_display_variable: ' + interval_display_variable)
-
-            active_market_interval = interval_display_variable + ' Analysis Interval'
+            active_market_interval = self.variables['menu']['interval'].get() + ' Analysis Interval'
             logger.debug('active_market_interval: ' + active_market_interval)
 
             self.variables['trade']['active_market']['interval'].set(active_market_interval)
 
-            # Orderbook
-            if self.binance_dcm != None and self.binance_dcm.symbol != self.variables['menu']['market'].get():
-                logger.info('New market selected. Closing existing depth cache manager.')
-                self.binance_dcm.close()
-
-                logger.debug('Opening new depth cache manager.')
-                self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
-
         except Exception as e:
             logger.exception(e)
 
-            process_combobox_return['success'] = False
+            update_markets_return['success'] = False
 
         finally:
-            return process_combobox_return
-
-    def orderbook_handler(self, depth_cache):
-        if depth_cache != None:
-            asks = depth_cache.get_asks()[:5]
-            bids = depth_cache.get_bids()[:5]
-
-            ask_book = ''
-            for x in range((len(asks) - 1), -1, -1):
-                ask_book += "{:.8f}".format(asks[x][0]) + '      ' + "{:.2f}".format(asks[x][1]) + '\n'
-            ask_book = ask_book.rstrip('\n')
-
-            bid_book = ''
-            for x in range(0, len(bids)):
-                bid_book += "{:.8f}".format(bids[x][0]) + '      ' + "{:.2f}".format(bids[x][1]) + '\n'
-            bid_book = bid_book.rstrip('\n')
-
-            if self.variables['trade']['orderbook']['asks'].get() == 'Updating':
-                self.widgets['trade']['orderbook']['variables']['asks'].config(bg=self.colors['bg']['orderbook']['asks'])#, justify=tk.LEFT)
-                self.trade_frame['orderbook']['asks'].config(bg=self.colors['bg']['orderbook']['asks'])#, justify=tk.LEFT)
-            if self.variables['trade']['orderbook']['bids'].get() == 'Updating':
-                self.widgets['trade']['orderbook']['variables']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])#, justify=tk.LEFT)
-                self.trade_frame['orderbook']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])
-
-            self.variables['trade']['orderbook']['asks'].set(ask_book)
-            self.variables['trade']['orderbook']['bids'].set(bid_book)
-
-        else:
-            # depth cache had an error and needs to be restarted
-            logger.error('Error while retrieving market depth cache.')
+            return update_markets_return
 
     def stop_display(self):
         self.display_active = False
@@ -1242,7 +1085,7 @@ class Display(threading.Thread):
                 ## Update Trade Display Values ##
                 #logger.debug('Updating trade display.')
 
-                update_trade_result = self.update_trade_values()
+                update_trade_result = self.update_trade_display()
 
                 if update_trade_result['success'] == False:
                     logger.error('Error while updating trade display.')
@@ -1251,7 +1094,7 @@ class Display(threading.Thread):
                 #logger.debug('Updating analysis display.')
 
                 if (time.time() - analysis_check_last) > self.analysis_update_interval:
-                    update_analysis_result = self.update_analysis_values()
+                    update_analysis_result = self.update_analysis_display()
 
                     if update_analysis_result['success'] == False:
                         logger.error('Error while updating analysis display.')
@@ -1272,11 +1115,6 @@ class Display(threading.Thread):
                         self.gui_data_ready = True
 
                         logger.info('GUI data fully updated and ready for use.')
-
-                # Open depth cache manager for orderbook if not yet initialized
-                elif self.binance_dcm == None:
-                    logger.debug('Initializing depth cache manager.')
-                    self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
 
                 delay_start = time.time()
                 while (time.time() - delay_start) < self.trade_update_interval:
@@ -1310,16 +1148,9 @@ class Display(threading.Thread):
 
         self.root.quit()
 
-        if reactor.running:
-            logger.debug('Closing depth cache manager.')
-            self.binance_dcm.close()
-
-            logger.info('Stopping reactor.')
-            reactor.stop()
-
         logger.debug('Exited main display loop.')
 
-    def update_trade_values(self):
+    def update_trade_display(self):
         update_return = {'success': True}
 
         try:
@@ -1384,7 +1215,7 @@ class Display(threading.Thread):
         finally:
             return update_return
 
-    def update_analysis_values(self):
+    def update_analysis_display(self):
         update_return = {'success': True}
 
         try:
@@ -1419,7 +1250,7 @@ class Display(threading.Thread):
             if aggregate_result['ok'] == 1:
                 analysis_last = aggregate_result['cursor']['firstBatch'][0]
 
-                #pprint(analysis_last)
+                pprint(analysis_last)
 
                 #### Update Analysis Display Values ####
 
@@ -1444,33 +1275,33 @@ class Display(threading.Thread):
 
                 # Difference
                 buy_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['buy']['absolute'])
-                #logger.debug('buy_diff_vol_abs: ' + buy_diff_vol_abs)
-                buy_diff_vol_per = "{:+.2%}".format(analysis_last['difference']['volume']['buy']['percent'])
-                #logger.debug('buy_diff_vol_per: ' + buy_diff_vol_per)
+                logger.debug('buy_diff_vol_abs: ' + buy_diff_vol_abs)
+                buy_diff_vol_per = "{:.2f}".format(analysis_last['difference']['volume']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_vol_per: ' + buy_diff_vol_per)
                 buy_diff_price_abs = "{:.8f}".format(analysis_last['difference']['price']['buy']['absolute'])
-                #logger.debug('buy_diff_price_abs: ' + buy_diff_price_abs)
-                buy_diff_price_per = "{:+.2%}".format(analysis_last['difference']['price']['buy']['percent'])
-                #logger.debug('buy_diff_price_per: ' + buy_diff_price_per)
+                logger.debug('buy_diff_price_abs: ' + buy_diff_price_abs)
+                buy_diff_price_per = "{:.2f}".format(analysis_last['difference']['price']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_price_per: ' + buy_diff_price_per)
                 buy_diff_amt_abs = "{:.2f}".format(analysis_last['difference']['amount']['buy']['absolute'])
-                #logger.debug('buy_diff_amt_abs: ' + buy_diff_amt_abs)
-                buy_diff_amt_per = "{:+.2%}".format(analysis_last['difference']['amount']['buy']['percent'])
-                #logger.debug('buy_diff_amt_per: ' + buy_diff_amt_per)
+                logger.debug('buy_diff_amt_abs: ' + buy_diff_amt_abs)
+                buy_diff_amt_per = "{:.2f}".format(analysis_last['difference']['amount']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_amt_per: ' + buy_diff_amt_per)
                 buy_diff_count_abs = "{:.0f}".format(analysis_last['difference']['count']['buy']['absolute'])
-                #logger.debug('buy_diff_count_abs: ' + buy_diff_count_abs)
-                buy_diff_count_per = "{:+.2%}".format(analysis_last['difference']['count']['buy']['percent'])
-                #logger.debug('buy_diff_count_per: ' + buy_diff_count_per)
+                logger.debug('buy_diff_count_abs: ' + buy_diff_count_abs)
+                buy_diff_count_per = "{:.2f}".format(analysis_last['difference']['count']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_count_per: ' + buy_diff_count_per)
                 buy_diff_ratevol_abs = "{:.4f}".format(analysis_last['difference']['rate_volume']['buy']['absolute'])
-                #logger.debug('buy_diff_ratevol_abs: ' + buy_diff_ratevol_abs)
-                buy_diff_ratevol_per = "{:+.2%}".format(analysis_last['difference']['rate_volume']['buy']['percent'])
-                #logger.debug('buy_diff_ratevol_per: ' + buy_diff_ratevol_per)
+                logger.debug('buy_diff_ratevol_abs: ' + buy_diff_ratevol_abs)
+                buy_diff_ratevol_per = "{:.2f}".format(analysis_last['difference']['rate_volume']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_ratevol_per: ' + buy_diff_ratevol_per)
                 buy_diff_rateamt_abs = "{:.4f}".format(analysis_last['difference']['rate_amount']['buy']['absolute'])
-                #logger.debug('buy_diff_rateamt_abs: ' + buy_diff_rateamt_abs)
-                buy_diff_rateamt_per = "{:+.2%}".format(analysis_last['difference']['rate_amount']['buy']['percent'])
-                #logger.debug('buy_diff_rateamt_per: ' + buy_diff_rateamt_per)
+                logger.debug('buy_diff_rateamt_abs: ' + buy_diff_rateamt_abs)
+                buy_diff_rateamt_per = "{:.2f}".format(analysis_last['difference']['rate_amount']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_rateamt_per: ' + buy_diff_rateamt_per)
                 buy_diff_ratecount_abs = "{:.4f}".format(analysis_last['difference']['rate_count']['buy']['absolute'])
-                #logger.debug('buy_diff_ratecount_abs: ' + buy_diff_ratecount_abs)
-                buy_diff_ratecount_per = "{:+.2%}".format(analysis_last['difference']['rate_count']['buy']['percent'])
-                #logger.debug('buy_diff_ratecount_per: ' + buy_diff_ratecount_per)
+                logger.debug('buy_diff_ratecount_abs: ' + buy_diff_ratecount_abs)
+                buy_diff_ratecount_per = "{:.2f}".format(analysis_last['difference']['rate_count']['buy']['percent'] * 100) + '%'
+                logger.debug('buy_diff_ratecount_per: ' + buy_diff_ratecount_per)
 
                 self.variables['analysis']['buys']['difference']['volume']['absolute'].set(buy_diff_vol_abs)
                 self.variables['analysis']['buys']['difference']['volume']['percent'].set(buy_diff_vol_per)
@@ -1508,33 +1339,33 @@ class Display(threading.Thread):
 
                 # Difference
                 sell_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['sell']['absolute'])
-                #logger.debug('sell_diff_vol_abs: ' + sell_diff_vol_abs)
-                sell_diff_vol_per = "{:+.2%}".format(analysis_last['difference']['volume']['sell']['percent'])
-                #logger.debug('sell_diff_vol_per: ' + sell_diff_vol_per)
+                logger.debug('sell_diff_vol_abs: ' + sell_diff_vol_abs)
+                sell_diff_vol_per = "{:.2f}".format(analysis_last['difference']['volume']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_vol_per: ' + sell_diff_vol_per)
                 sell_diff_price_abs = "{:.8f}".format(analysis_last['difference']['price']['sell']['absolute'])
-                #logger.debug('sell_diff_price_abs: ' + sell_diff_price_abs)
-                sell_diff_price_per = "{:+.2%}".format(analysis_last['difference']['price']['sell']['percent'])
-                #logger.debug('sell_diff_price_per: ' + sell_diff_price_per)
+                logger.debug('sell_diff_price_abs: ' + sell_diff_price_abs)
+                sell_diff_price_per = "{:.2f}".format(analysis_last['difference']['price']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_price_per: ' + sell_diff_price_per)
                 sell_diff_amt_abs = "{:.2f}".format(analysis_last['difference']['amount']['sell']['absolute'])
-                #logger.debug('sell_diff_amt_abs: ' + sell_diff_amt_abs)
-                sell_diff_amt_per = "{:+.2%}".format(analysis_last['difference']['amount']['sell']['percent'])
-                #logger.debug('sell_diff_amt_per: ' + sell_diff_amt_per)
+                logger.debug('sell_diff_amt_abs: ' + sell_diff_amt_abs)
+                sell_diff_amt_per = "{:.2f}".format(analysis_last['difference']['amount']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_amt_per: ' + sell_diff_amt_per)
                 sell_diff_count_abs = "{:.0f}".format(analysis_last['difference']['count']['sell']['absolute'])
-                #logger.debug('sell_diff_count_abs: ' + sell_diff_count_abs)
-                sell_diff_count_per = "{:+.2%}".format(analysis_last['difference']['count']['sell']['percent'])
-                #logger.debug('sell_diff_count_per: ' + sell_diff_count_per)
+                logger.debug('sell_diff_count_abs: ' + sell_diff_count_abs)
+                sell_diff_count_per = "{:.2f}".format(analysis_last['difference']['count']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_count_per: ' + sell_diff_count_per)
                 sell_diff_ratevol_abs = "{:.4f}".format(analysis_last['difference']['rate_volume']['sell']['absolute'])
-                #logger.debug('sell_diff_ratevol_abs: ' + sell_diff_ratevol_abs)
-                sell_diff_ratevol_per = "{:+.2%}".format(analysis_last['difference']['rate_volume']['sell']['percent'])
-                #logger.debug('sell_diff_ratevol_per: ' + sell_diff_ratevol_per)
+                logger.debug('sell_diff_ratevol_abs: ' + sell_diff_ratevol_abs)
+                sell_diff_ratevol_per = "{:.2f}".format(analysis_last['difference']['rate_volume']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_ratevol_per: ' + sell_diff_ratevol_per)
                 sell_diff_rateamt_abs = "{:.4f}".format(analysis_last['difference']['rate_amount']['sell']['absolute'])
-                #logger.debug('sell_diff_rateamt_abs: ' + sell_diff_rateamt_abs)
-                sell_diff_rateamt_per = "{:+.2%}".format(analysis_last['difference']['rate_amount']['sell']['percent'])
-                #logger.debug('sell_diff_rateamt_per: ' + sell_diff_rateamt_per)
+                logger.debug('sell_diff_rateamt_abs: ' + sell_diff_rateamt_abs)
+                sell_diff_rateamt_per = "{:.2f}".format(analysis_last['difference']['rate_amount']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_rateamt_per: ' + sell_diff_rateamt_per)
                 sell_diff_ratecount_abs = "{:.4f}".format(analysis_last['difference']['rate_count']['sell']['absolute'])
-                #logger.debug('sell_diff_ratecount_abs: ' + sell_diff_ratecount_abs)
-                sell_diff_ratecount_per = "{:+.2%}".format(analysis_last['difference']['rate_count']['sell']['percent'])
-                #logger.debug('sell_diff_ratecount_per: ' + sell_diff_ratecount_per)
+                logger.debug('sell_diff_ratecount_abs: ' + sell_diff_ratecount_abs)
+                sell_diff_ratecount_per = "{:.2f}".format(analysis_last['difference']['rate_count']['sell']['percent'] * 100) + '%'
+                logger.debug('sell_diff_ratecount_per: ' + sell_diff_ratecount_per)
 
                 self.variables['analysis']['sells']['difference']['volume']['absolute'].set(sell_diff_vol_abs)
                 self.variables['analysis']['sells']['difference']['volume']['percent'].set(sell_diff_vol_per)
@@ -1572,33 +1403,33 @@ class Display(threading.Thread):
 
                 # Difference
                 all_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['all']['absolute'])
-                #logger.debug('all_diff_vol_abs: ' + all_diff_vol_abs)
-                all_diff_vol_per = "{:+.2%}".format(analysis_last['difference']['volume']['all']['percent'])
-                #logger.debug('all_diff_vol_per: ' + all_diff_vol_per)
+                logger.debug('all_diff_vol_abs: ' + all_diff_vol_abs)
+                all_diff_vol_per = "{:.2f}".format(analysis_last['difference']['volume']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_vol_per: ' + all_diff_vol_per)
                 all_diff_price_abs = "{:.8f}".format(analysis_last['difference']['price']['all']['absolute'])
-                #logger.debug('all_diff_price_abs: ' + all_diff_price_abs)
-                all_diff_price_per = "{:+.2%}".format(analysis_last['difference']['price']['all']['percent'])
-                #logger.debug('all_diff_price_per: ' + all_diff_price_per)
+                logger.debug('all_diff_price_abs: ' + all_diff_price_abs)
+                all_diff_price_per = "{:.2f}".format(analysis_last['difference']['price']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_price_per: ' + all_diff_price_per)
                 all_diff_amt_abs = "{:.2f}".format(analysis_last['difference']['amount']['all']['absolute'])
-                #logger.debug('all_diff_amt_abs: ' + all_diff_amt_abs)
-                all_diff_amt_per = "{:+.2%}".format(analysis_last['difference']['amount']['all']['percent'])
-                #logger.debug('all_diff_amt_per: ' + all_diff_amt_per)
+                logger.debug('all_diff_amt_abs: ' + all_diff_amt_abs)
+                all_diff_amt_per = "{:.2f}".format(analysis_last['difference']['amount']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_amt_per: ' + all_diff_amt_per)
                 all_diff_count_abs = "{:.0f}".format(analysis_last['difference']['count']['all']['absolute'])
-                #logger.debug('all_diff_count_abs: ' + all_diff_count_abs)
-                all_diff_count_per = "{:+.2%}".format(analysis_last['difference']['count']['all']['percent'])
-                #logger.debug('all_diff_count_per: ' + all_diff_count_per)
+                logger.debug('all_diff_count_abs: ' + all_diff_count_abs)
+                all_diff_count_per = "{:.2f}".format(analysis_last['difference']['count']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_count_per: ' + all_diff_count_per)
                 all_diff_ratevol_abs = "{:.4f}".format(analysis_last['difference']['rate_volume']['all']['absolute'])
-                #logger.debug('all_diff_ratevol_abs: ' + all_diff_ratevol_abs)
-                all_diff_ratevol_per = "{:+.2%}".format(analysis_last['difference']['rate_volume']['all']['percent'])
-                #logger.debug('all_diff_ratevol_per: ' + all_diff_ratevol_per)
+                logger.debug('all_diff_ratevol_abs: ' + all_diff_ratevol_abs)
+                all_diff_ratevol_per = "{:.2f}".format(analysis_last['difference']['rate_volume']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_ratevol_per: ' + all_diff_ratevol_per)
                 all_diff_rateamt_abs = "{:.4f}".format(analysis_last['difference']['rate_amount']['all']['absolute'])
-                #logger.debug('all_diff_rateamt_abs: ' + all_diff_rateamt_abs)
-                all_diff_rateamt_per = "{:+.2%}".format(analysis_last['difference']['rate_amount']['all']['percent'])
-                #logger.debug('all_diff_rateamt_per: ' + all_diff_rateamt_per)
+                logger.debug('all_diff_rateamt_abs: ' + all_diff_rateamt_abs)
+                all_diff_rateamt_per = "{:.2f}".format(analysis_last['difference']['rate_amount']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_rateamt_per: ' + all_diff_rateamt_per)
                 all_diff_ratecount_abs = "{:.4f}".format(analysis_last['difference']['rate_count']['all']['absolute'])
-                #logger.debug('all_diff_ratecount_abs: ' + all_diff_ratecount_abs)
-                all_diff_ratecount_per = "{:+.2%}".format(analysis_last['difference']['rate_count']['all']['percent'])
-                #logger.debug('all_diff_ratecount_per: ' + all_diff_ratecount_per)
+                logger.debug('all_diff_ratecount_abs: ' + all_diff_ratecount_abs)
+                all_diff_ratecount_per = "{:.2f}".format(analysis_last['difference']['rate_count']['all']['percent'] * 100) + '%'
+                logger.debug('all_diff_ratecount_per: ' + all_diff_ratecount_per)
 
                 self.variables['analysis']['all']['difference']['volume']['absolute'].set(all_diff_vol_abs)
                 self.variables['analysis']['all']['difference']['volume']['percent'].set(all_diff_vol_per)
@@ -1615,20 +1446,7 @@ class Display(threading.Thread):
                 self.variables['analysis']['all']['difference']['rate_count']['absolute'].set(all_diff_ratecount_abs)
                 self.variables['analysis']['all']['difference']['rate_count']['percent'].set(all_diff_ratecount_per)
 
-                # Update Differential Progressbar
-                """
-                Flow Differential:
-                < 50 = Selling dominant
-                > 50 = Buying dominant
-                """
-                flow_differential = (analysis_last['current']['rate_volume']['buy'] / analysis_last['current']['rate_volume']['all']) * 100
-                #sell_flow_differential = analysis_last['current']['rate_volume']['sell'] / analysis_last['current']['rate_volume']['all']
-
-                self.variables['trade']['differential'].set(round(flow_differential, 2))
-
                 self.update_last['analysis'] = datetime.datetime.now()
-
-                logger.info(self.update_last['analysis'].isoformat(timespec='seconds', sep=' ') + ' - Flow Differential: ' + "{:.2f}".format(flow_differential))
 
                 self.root.update_idletasks()
 
@@ -1655,18 +1473,18 @@ class Display(threading.Thread):
 
         try:
             for category in self.widgets['analysis']:
-                #logger.debug('category: ' + category)
+                logger.debug('category: ' + category)
 
                 if category != 'titles':
                     for section in self.widgets['analysis'][category]['difference']:
-                        #logger.debug('section: ' + section)
+                        logger.debug('section: ' + section)
 
                         if section == 'variables':
                             for data_type in self.widgets['analysis'][category]['difference'][section]:
-                                #logger.debug('data_type: ' + data_type)
+                                logger.debug('data_type: ' + data_type)
 
                                 for element in self.widgets['analysis'][category]['difference'][section][data_type]:
-                                    #logger.debug('element: ' + element)
+                                    logger.debug('element: ' + element)
 
                                     if element == 'percent':
                                         if 'rate' in data_type:

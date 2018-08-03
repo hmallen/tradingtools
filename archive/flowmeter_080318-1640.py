@@ -788,35 +788,35 @@ class FlowMeter:
 
                         # Add results to return dictionary
                         analyze_return['result']['current']['volume'][match] = result_current['volume']
-                        analyze_return['result']['current']['price'][match] = result_current['price']
-                        analyze_return['result']['current']['amount'][match] = result_current['amount']
+                        analyze_return['result']['current']['price'][match] = round(result_current['price'], 8)
+                        analyze_return['result']['current']['amount'][match] = round(result_current['amount'], 8)
                         analyze_return['result']['current']['count'][match] = result_current['count']
-                        analyze_return['result']['current']['rate_volume'][match] = rate_volume_current
-                        analyze_return['result']['current']['rate_amount'][match] = rate_amount_current
-                        analyze_return['result']['current']['rate_count'][match] = rate_count_current
+                        analyze_return['result']['current']['rate_volume'][match] = round(rate_volume_current, 8)
+                        analyze_return['result']['current']['rate_amount'][match] = round(rate_amount_current, 8)
+                        analyze_return['result']['current']['rate_count'][match] = round(rate_count_current, 8)
 
                         analyze_return['result']['last']['volume'][match] = result_last['volume']
-                        analyze_return['result']['last']['price'][match] = result_last['price']
-                        analyze_return['result']['last']['amount'][match] = result_last['amount']
+                        analyze_return['result']['last']['price'][match] = round(result_last['price'], 8)
+                        analyze_return['result']['last']['amount'][match] = round(result_last['amount'], 8)
                         analyze_return['result']['last']['count'][match] = result_last['count']
-                        analyze_return['result']['last']['rate_volume'][match] = rate_volume_last
-                        analyze_return['result']['last']['rate_amount'][match] = rate_amount_last
-                        analyze_return['result']['last']['rate_count'][match] = rate_count_last
+                        analyze_return['result']['last']['rate_volume'][match] = round(rate_volume_last, 8)
+                        analyze_return['result']['last']['rate_amount'][match] = round(rate_amount_last, 8)
+                        analyze_return['result']['last']['rate_count'][match] = round(rate_count_last, 8)
 
                         analyze_return['result']['difference']['volume'][match]['absolute'] = result_current['volume'] - result_last['volume']
-                        analyze_return['result']['difference']['volume'][match]['percent'] = analyze_return['result']['difference']['volume'][match]['absolute'] / result_last['volume']
-                        analyze_return['result']['difference']['price'][match]['absolute'] = result_current['price'] - result_last['price']
-                        analyze_return['result']['difference']['price'][match]['percent'] = analyze_return['result']['difference']['price'][match]['absolute'] / result_last['price']
-                        analyze_return['result']['difference']['amount'][match]['absolute'] = result_current['amount'] - result_last['amount']
-                        analyze_return['result']['difference']['amount'][match]['percent'] = analyze_return['result']['difference']['amount'][match]['absolute'] / result_last['amount']
+                        analyze_return['result']['difference']['volume'][match]['percent'] = round(analyze_return['result']['difference']['volume'][match]['absolute'] / result_last['volume'], 8)
+                        analyze_return['result']['difference']['price'][match]['absolute'] = round(result_current['price'] - result_last['price'], 8)
+                        analyze_return['result']['difference']['price'][match]['percent'] = round(analyze_return['result']['difference']['price'][match]['absolute'] / result_last['price'], 8)
+                        analyze_return['result']['difference']['amount'][match]['absolute'] = round(result_current['amount'] - result_last['amount'], 8)
+                        analyze_return['result']['difference']['amount'][match]['percent'] = round(analyze_return['result']['difference']['amount'][match]['absolute'] / result_last['amount'], 8)
                         analyze_return['result']['difference']['count'][match]['absolute'] = result_current['count'] - result_last['count']
-                        analyze_return['result']['difference']['count'][match]['percent'] = analyze_return['result']['difference']['count'][match]['absolute'] / result_last['count']
-                        analyze_return['result']['difference']['rate_volume'][match]['absolute'] = rate_volume_current - rate_volume_last
-                        analyze_return['result']['difference']['rate_volume'][match]['percent'] = analyze_return['result']['difference']['rate_volume'][match]['absolute'] / rate_volume_last
-                        analyze_return['result']['difference']['rate_amount'][match]['absolute'] = rate_amount_current - rate_amount_last
-                        analyze_return['result']['difference']['rate_amount'][match]['percent'] = analyze_return['result']['difference']['rate_amount'][match]['absolute'] / rate_amount_last
-                        analyze_return['result']['difference']['rate_count'][match]['absolute'] = rate_count_current - rate_count_last
-                        analyze_return['result']['difference']['rate_count'][match]['percent'] = analyze_return['result']['difference']['rate_count'][match]['absolute'] / rate_count_last
+                        analyze_return['result']['difference']['count'][match]['percent'] = round(analyze_return['result']['difference']['count'][match]['absolute'] / result_last['count'], 8)
+                        analyze_return['result']['difference']['rate_volume'][match]['absolute'] = round(rate_volume_current - rate_volume_last, 8)
+                        analyze_return['result']['difference']['rate_volume'][match]['percent'] = round(analyze_return['result']['difference']['rate_volume'][match]['absolute'] / rate_volume_last, 8)
+                        analyze_return['result']['difference']['rate_amount'][match]['absolute'] = round(rate_amount_current - rate_amount_last, 8)
+                        analyze_return['result']['difference']['rate_amount'][match]['percent'] = round(analyze_return['result']['difference']['rate_amount'][match]['absolute'] / rate_amount_last, 8)
+                        analyze_return['result']['difference']['rate_count'][match]['absolute'] = round(rate_count_current - rate_count_last, 8)
+                        analyze_return['result']['difference']['rate_count'][match]['percent'] = round(analyze_return['result']['difference']['rate_count'][match]['absolute'] / rate_count_last, 8)
 
                     except Exception as e:
                         logger.warning('Failed to retrieve results from aggregation pipeline.')
