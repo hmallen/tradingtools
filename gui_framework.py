@@ -1078,11 +1078,24 @@ class Display(threading.Thread):
         self.widgets['menu']['buttons']['quit'].grid(row=0, column=4, sticky=tk.SE, padx=30, pady=1)
 
     def combobox_trace(self, *args):
+        """
+        *args:
+        ('PY_VAR94', '', 'w') --> Exchange Combobox
+        ('PY_VAR95', '', 'w') --> Market Combobox
+        ('PY_VAR96', '', 'w') --> Interval Combobox
+        """
+
         logger.debug('args: ' + str(args))
 
         logger.debug('Updating available analysis variables.')
 
-        process_combobox_result = self.process_combobox_selections()
+        if args[0] != 'PY_VAR96':
+            update_dcm = True
+        else:
+            update_dcm = False
+        logger.debug('update_dcm: ' + str(update_dcm))
+        
+        process_combobox_result = self.process_combobox_selections(update_depthcache_manager=update_dcm)
         logger.debug('process_combobox_result: ' + str(process_combobox_result))
 
         if process_combobox_result['success'] == True:
@@ -1113,7 +1126,7 @@ class Display(threading.Thread):
         #self.widgets['trade']['orderbook']['variables']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])
         pass
 
-    def process_combobox_selections(self):
+    def process_combobox_selections(self, update_depthcache_manager=False):
         process_combobox_return = {'success': True}
 
         try:
@@ -1192,13 +1205,16 @@ class Display(threading.Thread):
 
             self.variables['trade']['active_market']['interval'].set(active_market_interval)
 
-            # Orderbook
-            if self.binance_dcm != None and self.binance_dcm.symbol != self.variables['menu']['market'].get():
-                logger.info('New market selected. Closing existing depth cache manager.')
-                self.binance_dcm.close()
+            if update_depthcache_manager == True:
+                logger.debug('Updating depth cache manager.')
 
-                logger.debug('Opening new depth cache manager.')
-                self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+                # Orderbook
+                if self.binance_dcm != None:# and self.binance_dcm.symbol != self.variables['menu']['market'].get():
+                    logger.info('New market selected. Closing existing depth cache manager.')
+                    self.binance_dcm.close()
+
+                    logger.debug('Opening new depth cache manager.')
+                    self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
 
         except Exception as e:
             logger.exception(e)
