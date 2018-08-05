@@ -37,6 +37,8 @@ collections = {
 
 
 def candle_handler(msg):
+    pprint(msg)
+
     candle = msg['k']
 
     candle_doc = {
@@ -127,8 +129,10 @@ if __name__ == '__main__':
 
         binance_ws.start()
 
-        while (True):
-            time.sleep(0.1)
+        #while (True):
+            #time.sleep(0.1)
+
+        time.sleep(10)
 
     except Exception as e:
         logger.exception(e)

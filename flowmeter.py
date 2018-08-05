@@ -47,7 +47,11 @@ if mongo_uri == 'localhost':
 
 db = MongoClient(mongo_uri)[config['mongodb']['db']]
 
-collections = {'data': config['mongodb']['collection_data'], 'analysis': config['mongodb']['collection_analysis']}
+collections = {
+    'data': config['mongodb']['collection_data'],
+    'analysis': config['mongodb']['collection_analysis'],
+    'historical': config['mongodb']['collection_historical']
+}
 
 binance_api = config['binance']['api']
 binance_secret = config['binance']['secret']
@@ -58,11 +62,15 @@ binance_ws = BinanceSocketManager(binance_client)
 
 class FlowMeter:
 
-    def __init__(self, exchange=None, market=None, loop_time=10, clear_db=False):
+    def __init__(self, exchange=None, market=None, loop_time=10, cleanup_interval=3600, save_flow_historical=False, clear_db=False):
         try:
             self.user_exchange = exchange
             self.user_market = market
+
+            self.save_flow_historical = save_flow_historical
+
             self.loop_time = loop_time
+            self.cleanup_interval = cleanup_interval
 
             self.backtest_durations = [('1m', '1 minute'), ('5m', '5 minutes'), ('15m', '15 minutes'), ('30m', '30 minutes'), ('1h', '1 hour'),
                                        ('2h', '2 hours'), ('4h', '4 hours'), ('6h', '6 hours'), ('12h', '12 hours'), ('1d', '1 day')]
@@ -132,6 +140,11 @@ class FlowMeter:
                 else:
                     logger.debug('self.user_market: ' + self.user_market)
 
+            ## Check for existing documents for exchange/market and calculate duration of missing trades ##
+            trade_id_last = None
+            trade_dt_first = None
+            populate_extended = False
+
             ## Delete existing data for market from database, if requested ##
             if clear_db == True:
                 print('WARNING: Selected option to delete all database documents for ' + self.user_exchange.capitalize() + '-' + self.user_market.upper() + '.')
@@ -150,12 +163,8 @@ class FlowMeter:
                     logger.error('Unrecognized selection for confirmation of database deletion. Exiting.')
                     sys.exit(1)
 
-            ## Check for existing documents for exchange/market and calculate duration of missing trades ##
-            trade_id_last = None
-            trade_dt_first = None
-            populate_extended = False
-
-            if clear_db == False:
+            #if clear_db == False:
+            else:
                 missing_trades_result = self.check_missing_trades(self.user_exchange, self.user_market)
 
                 if missing_trades_result['success'] == True and missing_trades_result['result']['missing_duration'] != None:
@@ -604,14 +613,16 @@ class FlowMeter:
                                                                   'count': {'all': None, 'buy': None, 'sell': None},
                                                                   'rate_volume': {'all': None, 'buy': None, 'sell': None},
                                                                   'rate_amount': {'all': None, 'buy': None, 'sell': None},
-                                                                  'rate_count': {'all': None, 'buy': None, 'sell': None}},
+                                                                  'rate_count': {'all': None, 'buy': None, 'sell': None},
+                                                                  'flow_differential': None},
                                                       'last': {'volume': {'all': None, 'buy': None, 'sell': None},
                                                                'price': {'all': None, 'buy': None, 'sell': None},
                                                                'amount': {'all': None, 'buy': None, 'sell': None},
                                                                'count': {'all': None, 'buy': None, 'sell': None},
                                                                'rate_volume': {'all': None, 'buy': None, 'sell': None},
                                                                'rate_amount': {'all': None, 'buy': None, 'sell': None},
-                                                               'rate_count': {'all': None, 'buy': None, 'sell': None}},
+                                                               'rate_count': {'all': None, 'buy': None, 'sell': None},
+                                                               'flow_differential': None},
                                                       'difference': {'volume': {'all': {'absolute': None, 'percent': None},
                                                                                 'buy': {'absolute': None, 'percent': None},
                                                                                 'sell': {'absolute': None, 'percent': None}},
@@ -632,7 +643,8 @@ class FlowMeter:
                                                                                      'sell': {'absolute': None, 'percent': None}},
                                                                      'rate_count': {'all': {'absolute': None, 'percent': None},
                                                                                     'buy': {'absolute': None, 'percent': None},
-                                                                                    'sell': {'absolute': None, 'percent': None}}}}}
+                                                                                    'sell': {'absolute': None, 'percent': None}},
+                                                                     'flow_differential': {'absolute': None, 'percent': None}}}}
 
         try:
             logger.debug('exchange: ' + exchange)
@@ -822,6 +834,12 @@ class FlowMeter:
                         logger.warning('Failed to retrieve results from aggregation pipeline.')
                         logger.exception(e)
 
+            # Flow Differential Calculation
+            analyze_return['result']['current']['flow_differential'] = (analyze_return['result']['current']['rate_volume']['buy'] / analyze_return['result']['current']['rate_volume']['all']) * 100
+            analyze_return['result']['last']['flow_differential'] = (analyze_return['result']['last']['rate_volume']['buy'] / analyze_return['result']['last']['rate_volume']['all']) * 100
+            analyze_return['result']['difference']['flow_differential']['absolute'] = analyze_return['result']['current']['flow_differential'] - analyze_return['result']['last']['flow_differential']
+            analyze_return['result']['difference']['flow_differential']['percent'] = analyze_return['result']['difference']['flow_differential']['absolute'] / analyze_return['result']['last']['flow_differential']
+
         except Exception as e:
             logger.exception(e)
 
@@ -835,15 +853,57 @@ class FlowMeter:
             return analyze_return
 
 
+    def cleanup_database(self, delete_before):
+        cleanup_database_return = {'success': True, 'result': {'deleted_count': None}}
+
+        try:
+            delete_before_ms = time.mktime(dateparser.parse(delete_before).timetuple()) * 1000
+
+            delete_result = db[collections['data']].delete_many({'trade_time': {'$lt': delete_before_ms}})
+
+            cleanup_database_return['result']['deleted_count'] = delete_result.deleted_count
+
+        except Exception as e:
+            logger.exception(e)
+
+            cleanup_database_return['success'] = False
+
+        finally:
+            return cleanup_database_return
+
     def analysis_loop(self):
         delay_start = 0
+        cleanup_last = 0
 
         while (True):
             try:
+                if (time.time() - cleanup_last) > self.cleanup_interval:
+                    logger.info('Deleting old trade documents from database.')
+
+                    cleanup_database_result = self.cleanup_database(delete_before='49 hours ago')
+
+                    if cleanup_database_result['success'] == True:
+                        logger.info('Successfully deleted ' + str(cleanup_database_result['result']['deleted_count']) + ' old documents.')
+
+                        cleanup_last = time.time()
+                    else:
+                        logger.error('Error while deleting old trade documents from database.')
+
                 while (time.time() - delay_start) < self.loop_time:
                     time.sleep(1)
 
                 logger.info('Analyzing trade data.')
+
+                if self.save_flow_historical == True:
+                    flow_differential_values = {
+                        '_id': None,
+                        'time': None,
+                        'exchange': self.user_exchange,
+                        'market': self.user_market,
+                        'trade_currency': self.user_trade_currency,
+                        'quote_currency': self.user_quote_currency,
+                        'values': {}
+                    }
 
                 for backtest in self.backtest_durations:
                     logger.debug('backtest: ' + str(backtest))
@@ -871,8 +931,29 @@ class FlowMeter:
                         logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
                         logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
 
+                        if self.save_flow_historical == True:
+                            flow_differential_values['values'][backtest[0]] = analysis_document['current']['flow_differential']
+
                     else:
                         logger.error('Error while analyzing trade data.')
+
+                if self.save_flow_historical == True:
+                    # Get current market prices to archive with flow differential data
+                    flow_differential_values['market_prices'] = {
+                        self.user_market: binance_client.get_symbol_ticker(symbol=self.user_market)['price'],
+                        'BTCUSDT': binance_client.get_symbol_ticker(symbol='BTCUSDT')['price']
+                    }
+                    logger.debug('flow_differential_values[\'market_prices\']: ' + str(flow_differential_values['market_prices']))
+
+                    timestamp_current = int(time.mktime(datetime.datetime.now().timetuple()))
+
+                    flow_differential_values['time'] = timestamp_current
+                    flow_differential_values['_id'] = self.user_exchange + '-' + self.user_market.lower() + '-' + str(timestamp_current)
+
+                    logger.debug('flow_differential_values: ' + str(flow_differential_values))
+
+                    historical_flow_id = db[collections['historical']].insert_one(flow_differential_values).inserted_id
+                    logger.debug('historical_flow_id: ' + str(historical_flow_id))
 
                 delay_start = time.time()
 
@@ -901,4 +982,4 @@ if __name__ == '__main__':
     if user_market != None:
         user_market = user_market.upper()
 
-    flow_meter = FlowMeter(exchange=user_exchange, market=user_market, loop_time=loop_time)
+    flow_meter = FlowMeter(exchange=user_exchange, market=user_market, loop_time=loop_time, save_flow_historical=True)

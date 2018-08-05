@@ -50,7 +50,7 @@ binance_client = BinanceClient(binance_api, binance_secret)
 
 class Display(threading.Thread):
 
-    def __init__(self, master=None, trade_update_interval=1, analysis_update_interval=30):
+    def __init__(self, master=None, trade_update_interval=1, analysis_update_interval=10):
         self.root = master
 
         self.trade_update_interval = trade_update_interval
@@ -62,6 +62,12 @@ class Display(threading.Thread):
         self.images['trade']['arrow_buy'] = tk.PhotoImage(file='resources/gui/arrow_buy_small.gif')
         self.images['trade']['arrow_sell'] = tk.PhotoImage(file='resources/gui/arrow_sell_small.gif')
 
+        self.ttk_style = ttk.Style()
+        self.ttk_style.theme_use('clam')
+        self.ttk_style.configure('neutral.Horizontal.TProgressbar', foreground='grey', background='grey')
+        self.ttk_style.configure('red.Horizontal.TProgressbar', foreground='red3', background='red3')
+        self.ttk_style.configure('green.Horizontal.TProgressbar', foreground='green3', background='green3')
+
         self.fonts = {
             'trade': {
                 'titles': font.Font(family='Helvetica', size=13, weight='bold', underline=0),
@@ -70,6 +76,10 @@ class Display(threading.Thread):
                 'labelframes': {
                     'main': font.Font(family='Helvetica', size=11, weight='bold'),
                     'sub': font.Font(family='Helvetica', size=9, weight='bold')
+                },
+                'progressbar': {
+                    'value': font.Font(family='Helvetica', size=11, weight='bold'),
+                    'change': font.Font(family='Helvetica', size=11)
                 }
             },
             'analysis': {
@@ -110,7 +120,10 @@ class Display(threading.Thread):
                     'bids': tk.StringVar(),
                     'asks': tk.StringVar()
                 },
-                'differential': tk.DoubleVar()
+                'differential': {
+                    'value': tk.DoubleVar(),
+                    'change': tk.StringVar()
+                }
             },
             'analysis': {
                 'buys': {
@@ -292,7 +305,8 @@ class Display(threading.Thread):
         self.variables['trade']['orderbook']['asks'].set('Updating')
         self.variables['trade']['orderbook']['bids'].set('Updating')
 
-        self.variables['trade']['differential'].set(50.0)
+        self.variables['trade']['differential']['value'].set(50.0)
+        self.variables['trade']['differential']['change'].set('N/A')
 
         self.variables['menu']['status'].set('Updating')
 
@@ -467,11 +481,16 @@ class Display(threading.Thread):
                 'differential': {
                     'progressbar': ttk.Progressbar(
                         self.trade_frame['differential'],
+                        style='neutral.Horizontal.TProgressbar',
                         mode='determinate',
                         orient=tk.HORIZONTAL,
-                        variable=self.variables['trade']['differential']
+                        length=150,
+                        variable=self.variables['trade']['differential']['value']
                     ),
-                    'text': tk.Label(self.trade_frame['differential'], textvariable=self.variables['trade']['differential'], font=('Helvetica', 14, 'bold'))
+                    'text': {
+                        'value': tk.Label(self.trade_frame['differential'], textvariable=self.variables['trade']['differential']['value'], font=self.fonts['trade']['progressbar']['value']),
+                        'change': tk.Label(self.trade_frame['differential'], textvariable=self.variables['trade']['differential']['change'], font=self.fonts['trade']['progressbar']['change'])
+                    }
                 }
             },
             'analysis': {
@@ -826,16 +845,13 @@ class Display(threading.Thread):
         ## Trade Frames ##
         self.trade_frame['master'].grid(row=0, column=0, rowspan=2, padx=5, pady=1, sticky=tk.E)
 
-        self.trade_frame['active_market'].grid(row=0, column=0, padx=2, pady=15)#, sticky=tk.N)
-        self.trade_frame['last_trade'].grid(row=1, column=0, padx=2, pady=15)
-
-        self.trade_frame['orderbook']['main'].grid(row=2, column=0, padx=2, pady=15)
+        self.trade_frame['active_market'].grid(row=0, column=0, padx=2, pady=10)#, sticky=tk.N)
+        self.trade_frame['last_trade'].grid(row=1, column=0, padx=2, pady=10)
+        self.trade_frame['orderbook']['main'].grid(row=2, column=0, padx=2, pady=10)
+        self.trade_frame['differential'].grid(row=3, column=0, padx=2, pady=10)#, sticky=tk.W+tk.E)
 
         self.trade_frame['orderbook']['asks'].grid(row=0, column=0, padx=2, sticky=tk.SW+tk.SE)
-        #self.widgets['trade']['orderbook']['separator'].grid(row=1, column=0, sticky=tk.W+tk.E)    # Separator Widget
         self.trade_frame['orderbook']['bids'].grid(row=1, column=0, padx=2, sticky=tk.SW+tk.SE)
-
-        self.trade_frame['differential'].grid(row=3, column=0, padx=2, pady=15)
 
         ## Analysis Frames ##
 
@@ -892,8 +908,9 @@ class Display(threading.Thread):
         self.widgets['trade']['orderbook']['variables']['bids'].grid(row=1, column=0, sticky=tk.NW+tk.NE)
 
         # Differential Widgets
-        self.widgets['trade']['differential']['progressbar'].grid(row=0, column=0, sticky=tk.W+tk.E)#sticky=tk.N+tk.S+tk.E+tk.W)
-        self.widgets['trade']['differential']['text'].grid(row=1, column=0, sticky=tk.S)
+        self.widgets['trade']['differential']['progressbar'].grid(row=0, column=0, padx=5, pady=2)
+        self.widgets['trade']['differential']['text']['value'].grid(row=1, column=0)
+        self.widgets['trade']['differential']['text']['change'].grid(row=2, column=0)
 
         ## Analysis Widgets ##
 
@@ -1621,10 +1638,36 @@ class Display(threading.Thread):
                 < 50 = Selling dominant
                 > 50 = Buying dominant
                 """
-                flow_differential = (analysis_last['current']['rate_volume']['buy'] / analysis_last['current']['rate_volume']['all']) * 100
+                #flow_differential = (analysis_last['current']['rate_volume']['buy'] / analysis_last['current']['rate_volume']['all']) * 100
                 #sell_flow_differential = analysis_last['current']['rate_volume']['sell'] / analysis_last['current']['rate_volume']['all']
+                flow_differential = analysis_last['current']['flow_differential']
+                flow_differential_diff_abs = analysis_last['difference']['flow_differential']['absolute']
+                flow_differential_diff_per = analysis_last['difference']['flow_differential']['percent']
 
-                self.variables['trade']['differential'].set(round(flow_differential, 2))
+                self.variables['trade']['differential']['value'].set(round(flow_differential, 2))
+
+                interval_display_variable = self.variables['menu']['interval'].get()
+                if interval_display_variable[-1] == 's':
+                    interval_display_variable = interval_display_variable[:-1]
+                #logger.debug('interval_display_variable: ' + interval_display_variable)
+
+                #self.variables['trade']['differential']['change'].set(
+                    #interval_display_variable + ' Change:\n' +
+                    #"{:+.2f}".format(flow_differential_diff_abs) +
+                    #' (' + "{:+.2%}".format(flow_differential_diff_per) + ')'
+                #)
+                self.variables['trade']['differential']['change'].set(
+                    'Change (' + interval_display_variable + '):\n' +
+                    "{:+.2f}".format(flow_differential_diff_abs) +
+                    ' (' + "{:+.2%}".format(flow_differential_diff_per) + ')'
+                )
+
+                if flow_differential <= 50:
+                    differential_current_style = 'red.Horizontal.TProgressbar'
+                else:
+                    differential_current_style = 'green.Horizontal.TProgressbar'
+
+                self.widgets['trade']['differential']['progressbar'].config(style=differential_current_style)
 
                 self.update_last['analysis'] = datetime.datetime.now()
 
