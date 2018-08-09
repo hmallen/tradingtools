@@ -13,6 +13,7 @@ from pymongo import MongoClient
 
 from binance.client import Client as BinanceClient
 from binance.depthcache import DepthCacheManager
+from binance.enums import *
 from binance.websockets import BinanceSocketManager
 from twisted.internet import reactor
 
@@ -46,6 +47,7 @@ binance_api = config['binance']['api']
 binance_secret = config['binance']['secret']
 
 binance_client = BinanceClient(binance_api, binance_secret)
+binance_ws = BinanceSocketManager(binance_client)
 
 
 class Display(threading.Thread):
@@ -137,15 +139,6 @@ class Display(threading.Thread):
                         'rate_amount': tk.StringVar(),
                         'rate_count': tk.StringVar()
                     },
-                    'last': {
-                        'volume': tk.StringVar(),
-                        'price': tk.StringVar(),
-                        'amount': tk.StringVar(),
-                        'count': tk.StringVar(),
-                        'rate_volume': tk.StringVar(),
-                        'rate_amount': tk.StringVar(),
-                        'rate_count': tk.StringVar()
-                    },
                     'difference': {
                         'volume': {
                             'absolute': tk.StringVar(),
@@ -187,15 +180,6 @@ class Display(threading.Thread):
                         'rate_amount': tk.StringVar(),
                         'rate_count': tk.StringVar()
                     },
-                    'last': {
-                        'volume': tk.StringVar(),
-                        'price': tk.StringVar(),
-                        'amount': tk.StringVar(),
-                        'count': tk.StringVar(),
-                        'rate_volume': tk.StringVar(),
-                        'rate_amount': tk.StringVar(),
-                        'rate_count': tk.StringVar()
-                    },
                     'difference': {
                         'volume': {
                             'absolute': tk.StringVar(),
@@ -229,15 +213,6 @@ class Display(threading.Thread):
                 },
                 'all': {
                     'current': {
-                        'volume': tk.StringVar(),
-                        'price': tk.StringVar(),
-                        'amount': tk.StringVar(),
-                        'count': tk.StringVar(),
-                        'rate_volume': tk.StringVar(),
-                        'rate_amount': tk.StringVar(),
-                        'rate_count': tk.StringVar()
-                    },
-                    'last': {
                         'volume': tk.StringVar(),
                         'price': tk.StringVar(),
                         'amount': tk.StringVar(),
@@ -319,7 +294,13 @@ class Display(threading.Thread):
         self.combobox_intervals = None
 
         # Binance Websocket-based Features
-        self.binance_dcm = None
+        self.sockets = {
+            'depth_cache': None,
+            'auxillary': {
+                #'candles': None,
+                'ticker': None
+            }
+        }
 
         logger.info('Gathering available exchange, market, and interval information.')
 
@@ -373,19 +354,16 @@ class Display(threading.Thread):
             'buys': {
                 'main': None,
                 'current': None,
-                'last': None,
                 'difference': None
             },
             'sells': {
                 'main': None,
                 'current': None,
-                'last': None,
                 'difference': None
             },
             'all': {
                 'main': None,
                 'current': None,
-                'last': None,
                 'difference': None
             }
         }
@@ -402,8 +380,7 @@ class Display(threading.Thread):
             if frame != 'master':
                 frame_update = {
                     'current': tk.LabelFrame(self.analysis_frame[frame]['main'], text='Current', font=self.fonts['analysis']['labelframes']['sub']),
-                    'last': tk.LabelFrame(self.analysis_frame[frame]['main'], text='Last', font=self.fonts['analysis']['labelframes']['sub']),
-                    'difference': tk.LabelFrame(self.analysis_frame[frame]['main'], text='Difference', font=self.fonts['analysis']['labelframes']['sub'])
+                    'difference': tk.LabelFrame(self.analysis_frame[frame]['main'], text='Change', font=self.fonts['analysis']['labelframes']['sub'])
                 }
                 self.analysis_frame[frame].update(frame_update)
 
@@ -515,27 +492,6 @@ class Display(threading.Thread):
                             'rate_count': tk.Label(self.analysis_frame['buys']['current'], textvariable=self.variables['analysis']['buys']['current']['rate_count'])
                         }
                     },
-                    'last': {
-                        'titles': {},
-                        'text': {
-                            'volume': tk.Label(self.analysis_frame['buys']['last'], text='Volume:'),
-                            'price': tk.Label(self.analysis_frame['buys']['last'], text='Price Avg:'),
-                            'amount': tk.Label(self.analysis_frame['buys']['last'], text='Amount:'),
-                            'count': tk.Label(self.analysis_frame['buys']['last'], text='Count:'),
-                            'rate_volume': tk.Label(self.analysis_frame['buys']['last'], text='Vol. Rate:'),
-                            'rate_amount': tk.Label(self.analysis_frame['buys']['last'], text='Amt. Rate:'),
-                            'rate_count': tk.Label(self.analysis_frame['buys']['last'], text='Count Rate:')
-                        },
-                        'variables': {
-                            'volume': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['volume']),
-                            'price': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['price']),
-                            'amount': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['amount']),
-                            'count': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['count']),
-                            'rate_volume': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['rate_volume']),
-                            'rate_amount': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['rate_amount']),
-                            'rate_count': tk.Label(self.analysis_frame['buys']['last'], textvariable=self.variables['analysis']['buys']['last']['rate_count'])
-                        }
-                    },
                     'difference': {
                         'titles': {},
                         'text': {
@@ -601,27 +557,6 @@ class Display(threading.Thread):
                             'rate_count': tk.Label(self.analysis_frame['sells']['current'], textvariable=self.variables['analysis']['sells']['current']['rate_count'])
                         }
                     },
-                    'last': {
-                        'titles': {},
-                        'text': {
-                            'volume': tk.Label(self.analysis_frame['sells']['last'], text='Volume:'),
-                            'price': tk.Label(self.analysis_frame['sells']['last'], text='Price Avg:'),
-                            'amount': tk.Label(self.analysis_frame['sells']['last'], text='Amount:'),
-                            'count': tk.Label(self.analysis_frame['sells']['last'], text='Count:'),
-                            'rate_volume': tk.Label(self.analysis_frame['sells']['last'], text='Vol. Rate:'),
-                            'rate_amount': tk.Label(self.analysis_frame['sells']['last'], text='Amt. Rate:'),
-                            'rate_count': tk.Label(self.analysis_frame['sells']['last'], text='Count Rate:')
-                        },
-                        'variables': {
-                            'volume': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['volume']),
-                            'price': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['price']),
-                            'amount': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['amount']),
-                            'count': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['count']),
-                            'rate_volume': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['rate_volume']),
-                            'rate_amount': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['rate_amount']),
-                            'rate_count': tk.Label(self.analysis_frame['sells']['last'], textvariable=self.variables['analysis']['sells']['last']['rate_count'])
-                        }
-                    },
                     'difference': {
                         'titles': {},
                         'text': {
@@ -685,27 +620,6 @@ class Display(threading.Thread):
                             'rate_volume': tk.Label(self.analysis_frame['all']['current'], textvariable=self.variables['analysis']['all']['current']['rate_volume']),
                             'rate_amount': tk.Label(self.analysis_frame['all']['current'], textvariable=self.variables['analysis']['all']['current']['rate_amount']),
                             'rate_count': tk.Label(self.analysis_frame['all']['current'], textvariable=self.variables['analysis']['all']['current']['rate_count'])
-                        }
-                    },
-                    'last': {
-                        'titles': {},
-                        'text': {
-                            'volume': tk.Label(self.analysis_frame['all']['last'], text='Volume:'),
-                            'price': tk.Label(self.analysis_frame['all']['last'], text='Price Avg:'),
-                            'amount': tk.Label(self.analysis_frame['all']['last'], text='Amount:'),
-                            'count': tk.Label(self.analysis_frame['all']['last'], text='Count:'),
-                            'rate_volume': tk.Label(self.analysis_frame['all']['last'], text='Vol. Rate:'),
-                            'rate_amount': tk.Label(self.analysis_frame['all']['last'], text='Amt. Rate:'),
-                            'rate_count': tk.Label(self.analysis_frame['all']['last'], text='Count Rate:')
-                        },
-                        'variables': {
-                            'volume': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['volume']),
-                            'price': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['price']),
-                            'amount': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['amount']),
-                            'count': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['count']),
-                            'rate_volume': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['rate_volume']),
-                            'rate_amount': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['rate_amount']),
-                            'rate_count': tk.Label(self.analysis_frame['all']['last'], textvariable=self.variables['analysis']['all']['last']['rate_count'])
                         }
                     },
                     'difference': {
@@ -868,15 +782,12 @@ class Display(threading.Thread):
         self.analysis_frame['all']['main'].grid(row=1, column=2, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['buys']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['buys']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['buys']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['sells']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['sells']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['sells']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['all']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['all']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['all']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         ## Menu Frames ##
@@ -929,13 +840,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['buys']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -950,13 +854,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['sells']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -971,13 +868,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['all']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -994,13 +884,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['buys']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1022,13 +905,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['sells']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1050,13 +926,6 @@ class Display(threading.Thread):
         self.widgets['analysis']['all']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1099,7 +968,7 @@ class Display(threading.Thread):
             update_dcm = False
         logger.debug('update_dcm: ' + str(update_dcm))
 
-        process_combobox_result = self.process_combobox_selections(update_depthcache_manager=update_dcm)
+        process_combobox_result = self.process_combobox_selections(update_managers=update_dcm)
         logger.debug('process_combobox_result: ' + str(process_combobox_result))
 
         if process_combobox_result['success'] == True:
@@ -1130,7 +999,7 @@ class Display(threading.Thread):
         #self.widgets['trade']['orderbook']['variables']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])
         pass
 
-    def process_combobox_selections(self, update_depthcache_manager=False):
+    def process_combobox_selections(self, update_managers=False):
         process_combobox_return = {'success': True}
 
         try:
@@ -1209,16 +1078,27 @@ class Display(threading.Thread):
 
             self.variables['trade']['active_market']['interval'].set(active_market_interval)
 
-            if update_depthcache_manager == True:
-                logger.debug('Updating depth cache manager.')
+            if update_managers == True:
+                logger.debug('New market selected.')
 
                 # Orderbook
-                if self.binance_dcm != None:# and self.binance_dcm.symbol != self.variables['menu']['market'].get():
-                    logger.info('New market selected. Closing existing depth cache manager.')
-                    self.binance_dcm.close()
+                if self.sockets['depth_cache'] != None:
+                    logger.info('Closing existing depth cache manager.')
+                    self.sockets['depth_cache'].close()
 
                     logger.debug('Opening new depth cache manager.')
-                    self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+                    self.sockets['depth_cache'] = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+
+                for aux in self.sockets['auxillary']:
+                    if self.sockets['auxillary'][aux] != None:
+                        logger.info('Closing existing ' + aux + ' websocket.')
+                        self.sockets['auxillary'][aux].close()
+
+                        logger.info('Opening new ' + aux + ' websocket.')
+                        #if aux == 'candles':
+                            #self.sockets['auxillary'][aux] = binance_ws.start_kline_socket(symbol=self.variables['menu']['market'].get(), callback=self.candle_handler)
+                        if aux == 'ticker':
+                            self.sockets['auxillary'][aux] = binance_ws.start_symbol_ticker_socker(symbol=self.variables['menu']['market'].get(), callback=self.ticker_handler)
 
         except Exception as e:
             logger.exception(e)
@@ -1228,10 +1108,13 @@ class Display(threading.Thread):
         finally:
             return process_combobox_return
 
+    #def socket_handler(self, msg):
+        #pass
+
     def orderbook_handler(self, depth_cache):
         if depth_cache != None:
-            asks = depth_cache.get_asks()[:5]
-            bids = depth_cache.get_bids()[:5]
+            asks = depth_cache.get_asks()#[:5]
+            bids = depth_cache.get_bids()#[:5]
 
             ask_book = ''
             for x in range((len(asks) - 1), -1, -1):
@@ -1278,7 +1161,7 @@ class Display(threading.Thread):
                 self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['ready'], relief=tk.RAISED)
             elif mode == 'error':
                 self.variables['menu']['status'].set('Lost Connection')
-                self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['error'], relif=tk.SUNKEN)
+                self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['error'], relief=tk.SUNKEN)
             else:
                 logger.error('Unrecognized mode passed to update_status().')
                 update_status_return['success'] = False
@@ -1303,24 +1186,17 @@ class Display(threading.Thread):
 
         logger.debug('Entering threading run loop.')
 
-        #analysis_check_last = time.time()
         analysis_check_last = 0
 
         while self.display_active == True:
             try:
-                #logger.debug('self.display_active: ' + str(self.display_active))
-
                 ## Update Trade Display Values ##
-                #logger.debug('Updating trade display.')
-
                 update_trade_result = self.update_trade_values()
 
                 if update_trade_result['success'] == False:
                     logger.error('Error while updating trade display.')
 
                 ## Update Analysis Display Values ##
-                #logger.debug('Updating analysis display.')
-
                 if (time.time() - analysis_check_last) > self.analysis_update_interval:
                     update_analysis_result = self.update_analysis_values()
 
@@ -1349,9 +1225,25 @@ class Display(threading.Thread):
                         logger.info('GUI data fully updated and ready for use.')
 
                 # Open depth cache manager for orderbook if not yet initialized
-                elif self.binance_dcm == None:
-                    logger.debug('Initializing depth cache manager.')
-                    self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+                #elif self.sockets['depth_cache'] == None:
+                else:
+                    if self.sockets['depth_cache'] == None:
+                        logger.debug('Initializing depth cache manager.')
+                        self.sockets['depth_cache'] = DepthCacheManager(
+                            binance_client,
+                            symbol=self.variables['menu']['market'].get(),
+                            callback=self.orderbook_handler,
+                            depth=WEBSOCKET_DEPTH_5,
+                            refresh_interval=300
+                        )
+
+                    #if self.sockets['candles'] == None:
+                        #logger.debug('Initializing candle manager.')
+                        #self.sockets['candles'] = binance_ws.start_kline_socket(symbol=self.variables['menu']['market'].get(), callback=self.candle_handler)
+
+                    if self.sockets['ticker'] == None:
+                        logger.debug('Initializing ticker manager.')
+                        self.sockets['ticker'] = binance_ws.start_symbol_ticker_socket(symbol=self.variables['menu']['market'].get(), callback=self.ticker_handler)
 
                 # Check if database values are up-to-date
                 status_warning = False
@@ -1403,7 +1295,13 @@ class Display(threading.Thread):
 
         if reactor.running:
             logger.debug('Closing depth cache manager.')
-            self.binance_dcm.close()
+            self.sockets['depth_cache'].close()
+
+            #logger.info('Closing candle websocket.')
+            #self.sockets['candles'].stop_socket()
+
+            logger.info('Closing ticker websocket.')
+            self.sockets['ticker'].stop_socket()
 
             logger.info('Stopping reactor.')
             reactor.stop()
@@ -1525,15 +1423,6 @@ class Display(threading.Thread):
                 self.variables['analysis']['buys']['current']['rate_amount'].set("{:.4f}".format(analysis_last['current']['rate_amount']['buy']))
                 self.variables['analysis']['buys']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['buy']))
 
-                # Last
-                self.variables['analysis']['buys']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['buy']))
-                self.variables['analysis']['buys']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['buy']))
-                self.variables['analysis']['buys']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['buy']))
-                self.variables['analysis']['buys']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['buy']))
-                self.variables['analysis']['buys']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['buy']))
-                self.variables['analysis']['buys']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['buy']))
-                self.variables['analysis']['buys']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['buy']))
-
                 # Difference
                 buy_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['buy']['absolute'])
                 #logger.debug('buy_diff_vol_abs: ' + buy_diff_vol_abs)
@@ -1589,15 +1478,6 @@ class Display(threading.Thread):
                 self.variables['analysis']['sells']['current']['rate_amount'].set("{:.4f}".format(analysis_last['current']['rate_amount']['sell']))
                 self.variables['analysis']['sells']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['sell']))
 
-                # Last
-                self.variables['analysis']['sells']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['sell']))
-                self.variables['analysis']['sells']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['sell']))
-                self.variables['analysis']['sells']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['sell']))
-                self.variables['analysis']['sells']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['sell']))
-                self.variables['analysis']['sells']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['sell']))
-                self.variables['analysis']['sells']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['sell']))
-                self.variables['analysis']['sells']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['sell']))
-
                 # Difference
                 sell_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['sell']['absolute'])
                 #logger.debug('sell_diff_vol_abs: ' + sell_diff_vol_abs)
@@ -1652,15 +1532,6 @@ class Display(threading.Thread):
                 self.variables['analysis']['all']['current']['rate_volume'].set("{:.4f}".format(analysis_last['current']['rate_volume']['all']))
                 self.variables['analysis']['all']['current']['rate_amount'].set("{:.4f}".format(analysis_last['current']['rate_amount']['all']))
                 self.variables['analysis']['all']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['all']))
-
-                # Last
-                self.variables['analysis']['all']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['all']))
-                self.variables['analysis']['all']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['all']))
-                self.variables['analysis']['all']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['all']))
-                self.variables['analysis']['all']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['all']))
-                self.variables['analysis']['all']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['all']))
-                self.variables['analysis']['all']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['all']))
-                self.variables['analysis']['all']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['all']))
 
                 # Difference
                 all_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['all']['absolute'])

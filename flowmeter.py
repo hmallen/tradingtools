@@ -17,6 +17,7 @@ import dateparser
 from pymongo import MongoClient
 from twisted.internet import reactor
 
+#config_path = 'config/config.ini'
 config_path = 'config/config.ini'
 
 parser = argparse.ArgumentParser()

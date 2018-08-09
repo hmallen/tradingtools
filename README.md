@@ -5,6 +5,7 @@ Suite of tools for real-time cryptocurrency market analysis.
 <h2>flowmeter.py</h2>
 
 <b>To Do:</b>
+- Add check for time of last document to see if flowmeter acquisition running in background
 - Websockets/Candle acquisition on combobox selection
 - Charting
 - Orderbook display

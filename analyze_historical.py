@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 config_path = 'config/config.ini'
+analysis_directory = 'analysis/'
 
 #analysis_exchange = 'binance'
 #analysis_market = 'XLMBTC'
@@ -40,27 +41,25 @@ def dump_data_csv(data, market):
                   #'1 Minute', '5 Minute', '15 Minute',
                   #'30 Minute', '1 Hour', '2 Hour',
                   #'4 Hour', '6 Hour', '12 Hour', '1 Day']
-        header = ['Time', 'BTCUSDT', market,
+        header = ['Time', 'BTCUSDT', 'BTCUSDT (Normalized)',
+                  market, (market + ' (Normalized)'),
                   '5 Minute', '15 Minute', '30 Minute',
                   '1 Hour', '2 Hour', '4 Hour',
                   '6 Hour', '12 Hour', '1 Day']
 
-        print(len(data['x']))
-        print(len(data['y']['market_prices']['BTCUSDT']))
-        print(len(data['y']['market_prices'][market]))
-        #print(len(data['y']['flow_differential']['1m']))
-        print(len(data['y']['flow_differential']['5m']))
-        print(len(data['y']['flow_differential']['15m']))
-        print(len(data['y']['flow_differential']['30m']))
-        print(len(data['y']['flow_differential']['1h']))
-        print(len(data['y']['flow_differential']['2h']))
-        print(len(data['y']['flow_differential']['4h']))
-        print(len(data['y']['flow_differential']['6h']))
-        print(len(data['y']['flow_differential']['12h']))
-        print(len(data['y']['flow_differential']['1d']))
-        #sys.exit()
+        btcusdt_min = min(analysis_data['y']['market_prices']['BTCUSDT'])
+        logger.debug('btcusdt_min: ' + str(btcusdt_min))
+        btcusdt_max = max(analysis_data['y']['market_prices']['BTCUSDT'])
+        logger.debug('btcusdt_max: ' + str(btcusdt_max))
+        market_min = min(analysis_data['y']['market_prices'][market])
+        logger.debug('market_min: ' + str(market_min))
+        market_max = max(analysis_data['y']['market_prices'][market])
+        logger.debug('market_max: ' + str(market_max))
 
-        with open('analysis.csv', 'w', newline='') as csvfile:
+        csv_path = analysis_directory + 'analysis_' + datetime.datetime.now().strftime('%m%d%y-%H%M%S') + '.csv'
+        logger.debug('csv_path: ' + csv_path)
+
+        with open(csv_path, 'w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
 
             csv_writer.writerow(header)
@@ -71,11 +70,17 @@ def dump_data_csv(data, market):
                 row = []
 
                 row.append(data['x'][x])
-                row.append(data['y']['market_prices']['BTCUSDT'][x] / 100)
-                row.append(data['y']['market_prices'][market][x] * 1000000)
-                #for interval in data['y']['flow_differential']:
-                    #row.append(data['y']['flow_differential'][interval][x])
-                #row.append(data['y']['flow_differential']['1m'][x])
+
+                # BTCUSDT Market Price
+                row.append(data['y']['market_prices']['BTCUSDT'][x])
+                # BTCUSDT "Oscillator" --> (Price - Minimum) / (Maximum - Minimum)
+                row.append((data['y']['market_prices']['BTCUSDT'][x] - btcusdt_min) / (btcusdt_max - btcusdt_min) * 100)
+
+                # Market Price of Target Currency
+                row.append(data['y']['market_prices'][market][x])
+                # Market Price "Oscillator"
+                row.append((data['y']['market_prices'][market][x] - market_min) / (market_max - market_min) * 100)
+
                 row.append(data['y']['flow_differential']['5m'][x])
                 row.append(data['y']['flow_differential']['15m'][x])
                 row.append(data['y']['flow_differential']['30m'][x])

@@ -10,6 +10,8 @@ name = "pypi"
 python-binance = "*"
 pymongo = "*"
 numpy = "*"
+dnspython = "*"
+matplotlib = "*"
 
 
 [dev-packages]

@@ -320,6 +320,7 @@ class Display(threading.Thread):
 
         # Binance Websocket-based Features
         self.binance_dcm = None
+        self.binance_candles = None
 
         logger.info('Gathering available exchange, market, and interval information.')
 
@@ -868,15 +869,15 @@ class Display(threading.Thread):
         self.analysis_frame['all']['main'].grid(row=1, column=2, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['buys']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['buys']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
+        #self.analysis_frame['buys']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['buys']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['sells']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['sells']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
+        #self.analysis_frame['sells']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['sells']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         self.analysis_frame['all']['current'].grid(row=0, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
-        self.analysis_frame['all']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
+        #self.analysis_frame['all']['last'].grid(row=1, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
         self.analysis_frame['all']['difference'].grid(row=2, column=0, padx=2, pady=1)#, sticky=tk.N+tk.S+tk.E+tk.W)
 
         ## Menu Frames ##
@@ -929,13 +930,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['buys']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -950,13 +951,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['sells']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -971,13 +972,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['all']['current']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['count'].grid(row=3, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['rate_volume'].grid(row=4, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['rate_amount'].grid(row=5, column=0, sticky=tk.E, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['text']['rate_count'].grid(row=6, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['volume'].grid(row=0, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['price'].grid(row=1, column=0, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['text']['amount'].grid(row=2, column=0, sticky=tk.E, padx=2, pady=1)
@@ -994,13 +995,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['buys']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['buys']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['buys']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['buys']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1022,13 +1023,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['sells']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['sells']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['sells']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['sells']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1050,13 +1051,13 @@ class Display(threading.Thread):
         self.widgets['analysis']['all']['current']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['current']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
-        self.widgets['analysis']['all']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['volume'].grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['price'].grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['amount'].grid(row=2, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['count'].grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['rate_volume'].grid(row=4, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['rate_amount'].grid(row=5, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
+        #self.widgets['analysis']['all']['last']['variables']['rate_count'].grid(row=6, column=1, columnspan=2, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['volume']['absolute'].grid(row=0, column=1, sticky=tk.W, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['volume']['percent'].grid(row=0, column=2, sticky=tk.E, padx=2, pady=1)
         self.widgets['analysis']['all']['difference']['variables']['price']['absolute'].grid(row=1, column=1, sticky=tk.W, padx=2, pady=1)
@@ -1099,7 +1100,7 @@ class Display(threading.Thread):
             update_dcm = False
         logger.debug('update_dcm: ' + str(update_dcm))
 
-        process_combobox_result = self.process_combobox_selections(update_depthcache_manager=update_dcm)
+        process_combobox_result = self.process_combobox_selections(update_managers=update_dcm)
         logger.debug('process_combobox_result: ' + str(process_combobox_result))
 
         if process_combobox_result['success'] == True:
@@ -1130,7 +1131,7 @@ class Display(threading.Thread):
         #self.widgets['trade']['orderbook']['variables']['bids'].config(bg=self.colors['bg']['orderbook']['bids'])
         pass
 
-    def process_combobox_selections(self, update_depthcache_manager=False):
+    def process_combobox_selections(self, update_managers=False):
         process_combobox_return = {'success': True}
 
         try:
@@ -1209,16 +1210,20 @@ class Display(threading.Thread):
 
             self.variables['trade']['active_market']['interval'].set(active_market_interval)
 
-            if update_depthcache_manager == True:
-                logger.debug('Updating depth cache manager.')
+            if update_managers == True:
+                logger.debug('New market selected.')
 
                 # Orderbook
                 if self.binance_dcm != None:# and self.binance_dcm.symbol != self.variables['menu']['market'].get():
-                    logger.info('New market selected. Closing existing depth cache manager.')
+                    logger.info('Closing existing depth cache manager.')
                     self.binance_dcm.close()
 
                     logger.debug('Opening new depth cache manager.')
                     self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+
+                if self.binance_candles != None:
+                    logger.info('Closing existing candles websocket.')
+                    self.binance_candles.close()
 
         except Exception as e:
             logger.exception(e)
@@ -1278,7 +1283,7 @@ class Display(threading.Thread):
                 self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['ready'], relief=tk.RAISED)
             elif mode == 'error':
                 self.variables['menu']['status'].set('Lost Connection')
-                self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['error'], relif=tk.SUNKEN)
+                self.widgets['menu']['variables']['status'].configure(bg=self.colors['bg']['error'], relief=tk.SUNKEN)
             else:
                 logger.error('Unrecognized mode passed to update_status().')
                 update_status_return['success'] = False
@@ -1349,9 +1354,14 @@ class Display(threading.Thread):
                         logger.info('GUI data fully updated and ready for use.')
 
                 # Open depth cache manager for orderbook if not yet initialized
-                elif self.binance_dcm == None:
-                    logger.debug('Initializing depth cache manager.')
-                    self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+                #elif self.binance_dcm == None:
+                else:
+                    if self.binance_dcm == None:
+                        logger.debug('Initializing depth cache manager.')
+                        self.binance_dcm = DepthCacheManager(binance_client, symbol=self.variables['menu']['market'].get(), callback=self.orderbook_handler, refresh_interval=300)
+
+                    if self.binance_candles == None:
+                        pass
 
                 # Check if database values are up-to-date
                 status_warning = False
@@ -1526,13 +1536,13 @@ class Display(threading.Thread):
                 self.variables['analysis']['buys']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['buy']))
 
                 # Last
-                self.variables['analysis']['buys']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['buy']))
-                self.variables['analysis']['buys']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['buy']))
-                self.variables['analysis']['buys']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['buy']))
-                self.variables['analysis']['buys']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['buy']))
-                self.variables['analysis']['buys']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['buy']))
-                self.variables['analysis']['buys']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['buy']))
-                self.variables['analysis']['buys']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['buy']))
+                #self.variables['analysis']['buys']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['buy']))
+                #self.variables['analysis']['buys']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['buy']))
+                #self.variables['analysis']['buys']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['buy']))
+                #self.variables['analysis']['buys']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['buy']))
+                #self.variables['analysis']['buys']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['buy']))
+                #self.variables['analysis']['buys']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['buy']))
+                #self.variables['analysis']['buys']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['buy']))
 
                 # Difference
                 buy_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['buy']['absolute'])
@@ -1590,13 +1600,13 @@ class Display(threading.Thread):
                 self.variables['analysis']['sells']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['sell']))
 
                 # Last
-                self.variables['analysis']['sells']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['sell']))
-                self.variables['analysis']['sells']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['sell']))
-                self.variables['analysis']['sells']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['sell']))
-                self.variables['analysis']['sells']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['sell']))
-                self.variables['analysis']['sells']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['sell']))
-                self.variables['analysis']['sells']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['sell']))
-                self.variables['analysis']['sells']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['sell']))
+                #self.variables['analysis']['sells']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['sell']))
+                #self.variables['analysis']['sells']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['sell']))
+                #self.variables['analysis']['sells']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['sell']))
+                #self.variables['analysis']['sells']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['sell']))
+                #self.variables['analysis']['sells']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['sell']))
+                #self.variables['analysis']['sells']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['sell']))
+                #self.variables['analysis']['sells']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['sell']))
 
                 # Difference
                 sell_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['sell']['absolute'])
@@ -1654,13 +1664,13 @@ class Display(threading.Thread):
                 self.variables['analysis']['all']['current']['rate_count'].set("{:.4f}".format(analysis_last['current']['rate_count']['all']))
 
                 # Last
-                self.variables['analysis']['all']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['all']))
-                self.variables['analysis']['all']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['all']))
-                self.variables['analysis']['all']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['all']))
-                self.variables['analysis']['all']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['all']))
-                self.variables['analysis']['all']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['all']))
-                self.variables['analysis']['all']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['all']))
-                self.variables['analysis']['all']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['all']))
+                #self.variables['analysis']['all']['last']['volume'].set("{:.2f}".format(analysis_last['last']['volume']['all']))
+                #self.variables['analysis']['all']['last']['price'].set("{:.8f}".format(analysis_last['last']['price']['all']))
+                #self.variables['analysis']['all']['last']['amount'].set("{:.2f}".format(analysis_last['last']['amount']['all']))
+                #self.variables['analysis']['all']['last']['count'].set("{:.0f}".format(analysis_last['last']['count']['all']))
+                #self.variables['analysis']['all']['last']['rate_volume'].set("{:.4f}".format(analysis_last['last']['rate_volume']['all']))
+                #self.variables['analysis']['all']['last']['rate_amount'].set("{:.4f}".format(analysis_last['last']['rate_amount']['all']))
+                #self.variables['analysis']['all']['last']['rate_count'].set("{:.4f}".format(analysis_last['last']['rate_count']['all']))
 
                 # Difference
                 all_diff_vol_abs = "{:.0f}".format(analysis_last['difference']['volume']['all']['absolute'])
